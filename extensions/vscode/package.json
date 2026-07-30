@@ -1,0 +1,27 @@
+{
+  "name": "oberth",
+  "publisher": "oberth",
+  "displayName": "oberth",
+  "version": "0.1.0-alpha.1",
+  "license": "Apache-2.0",
+  "files": ["extension.js", "README.md"],
+  "engines": {"vscode": "^1.90.0"},
+  "main": "./extension.js",
+  "activationEvents": ["onCommand:oberth.run", "onCommand:oberth.status", "onCommand:oberth.review", "onCommand:oberth.openControlRoom"],
+  "contributes": {
+    "commands": [
+      {"command": "oberth.run", "title": "oberth: Run intention"},
+      {"command": "oberth.status", "title": "oberth: Show task status"},
+      {"command": "oberth.review", "title": "oberth: Review latest diff"},
+      {"command": "oberth.openControlRoom", "title": "oberth: Open Control Room"}
+    ],
+    "configuration": {
+      "title": "oberth",
+      "properties": {
+        "oberth.cliPath": {"type": "string", "default": "", "description": "Optional CLI path. Empty uses the standard per-user install or PATH."},
+        "oberth.apiUrl": {"type": "string", "default": "http://127.0.0.1:9090"},
+        "oberth.uiUrl": {"type": "string", "default": "http://127.0.0.1:5173"}
+      }
+    }
+  }
+}

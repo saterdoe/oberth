@@ -1,0 +1,15 @@
+@import './styles.css' layer(legacy);
+@import './task-form.css' layer(legacy);
+@import './tasks.css' layer(legacy);
+@import './settings.css' layer(legacy);
+@import './dashboard.css' layer(legacy);
+@import './design-system.css';
+
+.startup-screen{height:100%;display:grid;place-content:center;justify-items:center;gap:12px;padding:32px;text-align:center;background:var(--canvas);color:var(--label)}
+.startup-screen img{width:min(220px,60vw);height:auto;margin-bottom:10px}
+.startup-screen strong{font:600 15px var(--sans)}
+.startup-screen p{max-width:420px;margin:0;color:var(--secondary);font-size:12px}
+.startup-spinner{width:22px;height:22px;border:2px solid var(--separator-strong);border-top-color:var(--blue);border-radius:50%;animation:startup-spin .8s linear infinite}
+.startup-screen button{min-height:36px;padding:0 16px;border:0;border-radius:6px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer}
+.startup-error p{color:var(--red)}
+@keyframes startup-spin{to{transform:rotate(360deg)}}

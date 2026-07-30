@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:oberth:schema:result-bundle:v1",
+  "title": "Oberth Result Bundle v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "task_id",
+    "session_id",
+    "base_commit",
+    "worktree",
+    "branch",
+    "diff",
+    "diff_hash",
+    "context",
+    "context_hash",
+    "tokens_input",
+    "tokens_output",
+    "cost",
+    "warnings",
+    "runtime"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "task_id": { "type": "string", "format": "uuid" },
+    "session_id": { "type": "string", "format": "uuid" },
+    "base_commit": { "type": "string" },
+    "worktree": { "type": "string" },
+    "branch": { "type": "string" },
+    "diff": { "type": "array" },
+    "diff_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "context": {},
+    "context_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "tokens_input": { "type": "integer", "minimum": 0 },
+    "tokens_output": { "type": "integer", "minimum": 0 },
+    "cost": { "type": "number", "minimum": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "commands": {},
+    "verification_status": {},
+    "outcome": { "enum": ["accepted", "corrected", "rejected"] },
+    "runtime": { "type": "object" },
+    "reasoning": {
+      "type": "object",
+      "required": ["schema_version", "records", "evidence", "assessment"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "statement", "status"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["fact", "hypothesis", "assumption", "unknown", "property", "decision"] },
+              "statement": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["open", "supported", "refuted", "unresolved", "passed", "failed", "unknown"] },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "evidence_ids": { "type": "array", "items": { "type": "string" } },
+              "falsifier": { "type": "string" },
+              "scope": { "type": "string" },
+              "required": { "type": "boolean" },
+              "next_action": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "source"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+              "subject": { "type": "string" },
+              "subject_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+              "detail": { "type": "string" },
+              "stale": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "assessment": {
+          "type": "object",
+          "required": ["material_records", "supported_records", "coverage_percent", "missing_evidence", "dangling_evidence", "gate_blockers"],
+          "properties": {
+            "material_records": { "type": "integer", "minimum": 0 },
+            "supported_records": { "type": "integer", "minimum": 0 },
+            "coverage_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "missing_evidence": { "type": "array", "items": { "type": "string" } },
+            "dangling_evidence": { "type": "array", "items": { "type": "string" } },
+            "gate_blockers": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["os", "arch", "go_version"],
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "go_version": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

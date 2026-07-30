@@ -1,0 +1,48 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  artifacts:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            suffix: ""
+          - os: macos-latest
+            goos: darwin
+            suffix: ""
+          - os: windows-latest
+            goos: windows
+            suffix: ".exe"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        shell: bash
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o "dist/oberth${{ matrix.suffix }}" ./cmd/oberth
+          go build -trimpath -ldflags="-s -w" -o "dist/oberth-server${{ matrix.suffix }}" ./cmd/oberth-server
+          cd dist
+          sha256sum * > SHA256SUMS
+      - uses: anchore/sbom-action@v0
+        with:
+          path: dist
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oberth-${{ matrix.goos }}
+          path: dist/*

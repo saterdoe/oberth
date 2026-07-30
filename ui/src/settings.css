@@ -1,0 +1,35 @@
+.settings-panel{padding:14px;overflow-y:auto;display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,420px);gap:18px}.provider-form{padding:12px;background:var(--bg2);border:1px solid var(--b0);border-radius:5px}.provider-form label{display:block;color:var(--t3);font:9px var(--mono);margin-bottom:8px;text-transform:uppercase}.provider-form input,.provider-form select{display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--b0);border-radius:3px;background:var(--bg1);color:var(--t1);font:10px var(--mono);outline:none}.provider-form input:focus,.provider-form select:focus{border-color:var(--acc)}.provider-form button{padding:7px 10px;border:1px solid rgba(138,169,154,.25);border-radius:3px;background:var(--ok-d);color:var(--ok);font:10px var(--mono);cursor:pointer}.provider-form p{color:var(--t2);font:9px var(--mono)}@media(max-width:720px){.settings-panel{grid-template-columns:1fr}}
+.local-discovery-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;color:var(--t3);font:9px var(--mono)}.local-discovery-head button,.local-candidate button{padding:5px 7px;border:1px solid var(--b1);border-radius:3px;background:var(--bg2);color:var(--t1);font:9px var(--mono);cursor:pointer}.local-candidates{display:grid;gap:5px;margin-bottom:16px}.local-candidate{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px;border:1px solid var(--b0);border-radius:4px;background:var(--bg1)}.local-candidate>div{display:grid;gap:3px;min-width:0}.local-candidate strong{display:flex;align-items:center;gap:6px;color:var(--t0);font:10px var(--mono)}.local-candidate span,.local-candidate code{color:var(--t3);font:9px/1.4 var(--mono);overflow-wrap:anywhere}.local-candidate code{color:var(--t2)}
+
+/* Settings is one document with one scrollbar, not two competing panels. */
+.language-settings{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.language-settings p{margin:4px 0 0;color:var(--t2)}
+.language-settings select{min-width:180px}
+.settings-view{overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:14px 16px 28px}
+.settings-view>.settings-panel{flex:none;min-height:auto;overflow:visible;padding:0}
+.semantic-settings-card{padding:12px;border:1px solid var(--b0);border-radius:6px;background:linear-gradient(120deg,var(--bg2),var(--bg1));margin-bottom:14px}
+.semantic-engine-card{padding:0;border:0;background:transparent}
+.semantic-engine-actions{display:grid!important;grid-template-columns:auto minmax(120px,160px);align-items:end;gap:5px 8px!important;flex:none}
+.semantic-engine-actions label{grid-column:1/-1;color:var(--t3);font:9px var(--mono);text-transform:uppercase}
+.semantic-engine-actions select{height:30px;border:1px solid var(--b1);border-radius:3px;background:var(--bg1);color:var(--t0);padding:0 8px;font:10px var(--mono)}
+.semantic-engine-actions button{height:30px}
+.semantic-engine-actions button:disabled{cursor:not-allowed;opacity:.45}
+.settings-message{margin:9px 0 0;padding:7px 9px;border:1px solid rgba(138,169,154,.2);border-radius:4px;background:var(--ok-d);color:var(--ok);font:10px/1.45 var(--mono)}
+.settings-message.error{border-color:rgba(185,139,139,.25);background:var(--ed);color:var(--err)}
+.settings-error-details{margin-top:6px;color:var(--t2);font:9px var(--mono)}
+.settings-error-details summary{cursor:pointer}
+.settings-error-details code{display:block;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:720px){
+  .settings-view{padding:10px 10px 22px}
+  .language-settings{align-items:stretch;flex-direction:column;gap:14px}
+  .language-settings select{width:100%;min-width:0}
+  .semantic-engine-card{align-items:flex-start}
+  .semantic-engine-actions{width:100%;grid-template-columns:1fr 1fr}
+  .local-discovery-head{align-items:flex-start;flex-direction:column}
+  .local-candidate{align-items:flex-start;flex-wrap:wrap}
+}
+@media(max-width:960px){
+  .settings-panel{grid-template-columns:1fr}
+  .semantic-settings-card{min-width:0}
+  .local-candidate strong,.provider-badge{white-space:nowrap}
+}

@@ -1,0 +1,23 @@
+{
+  "name": "oberth",
+  "version": "0.1.0-alpha.1",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "start.cmd -NoOpen",
+    "stop": "start.cmd -Stop",
+    "dev": "npm --prefix ui run dev",
+    "build": "npm --prefix ui run build",
+    "build:all": "npm run build",
+    "test": "npm --prefix ui run test",
+    "test:docs": "node scripts/docs_contract.test.mjs",
+    "typecheck": "npm --prefix ui run typecheck"
+  },
+  "devDependencies": {
+    "@boundaryml/baml": "^0.222.0",
+    "playwright": "^1.60.0"
+  }
+}

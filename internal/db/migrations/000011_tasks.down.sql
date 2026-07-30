@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_sessions_task_id;
+ALTER TABLE sessions DROP COLUMN IF EXISTS task_id;
+DROP TABLE IF EXISTS tasks;

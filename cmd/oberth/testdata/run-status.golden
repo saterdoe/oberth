@@ -1,0 +1,6 @@
+Run 12345678
+State: blocked
+Task: abcdef12
+Cost: $0.0123
+Verification: failed
+Next action: Inspect `oberth review`, address the blocker, then resume.

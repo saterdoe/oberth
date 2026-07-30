@@ -1,0 +1,100 @@
+.task-create select {
+  width: 100%;
+  border: 1px solid var(--b0);
+  border-radius: 3px;
+  background: var(--bg1);
+  color: var(--t1);
+  font: 10px var(--mono);
+  padding: 7px;
+  outline: none;
+}
+
+.repository-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.repository-field > span {
+  color: var(--t2);
+  font: 9px var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.repository-boundary,
+.repository-required {
+  border: 1px solid var(--b0);
+  border-radius: 3px;
+  background: var(--bg1);
+  padding: 7px;
+  font: 9px/1.45 var(--mono);
+}
+
+.repository-boundary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.repository-boundary strong {
+  color: var(--t0);
+  font-weight: 500;
+}
+
+.repository-boundary code {
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+
+.repository-boundary span {
+  color: var(--ok);
+}
+
+.repository-required {
+  color: var(--warn);
+  background: var(--wd);
+  border-color: rgba(182,162,122,.22);
+}
+.repository-select-action,
+.repository-connect-link {
+  width: 100%;
+}
+.repository-connect-link {
+  color: var(--t2) !important;
+  background: var(--bg1) !important;
+  border-color: var(--b0) !important;
+}
+.repository-connect {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--b1);
+  border-radius: 3px;
+  background: var(--bg2);
+  padding: 8px;
+}
+.repository-connect label {
+  display: grid;
+  gap: 4px;
+  color: var(--t2);
+  font: 9px var(--mono);
+}
+.repository-safety{margin-top:7px;color:var(--ok);font-size:11px;font-weight:600}
+.completed-banner{margin-top:7px;padding:8px 10px;border:1px solid rgba(138,169,154,.25);border-radius:4px;background:var(--ok-d);color:var(--ok);font:10px/1.5 var(--mono);font-weight:500}
+.intention-field{display:grid;gap:6px}
+.intention-field>span{font-size:11px;font-weight:700;color:var(--muted)}
+.workflow-toggle{display:flex;align-items:center;gap:7px;color:var(--t1);font:10px var(--mono)}
+.workflow-toggle input{width:auto}
+.workflow-editor{display:grid;gap:7px;border:1px solid var(--b1);border-radius:4px;background:var(--bg2);padding:8px}
+.workflow-editor p{margin:0;color:var(--t2);font:9px/1.45 var(--mono)}
+.workflow-warning{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:7px;border:1px solid rgba(205,165,90,.35);border-radius:3px;background:rgba(205,165,90,.08);color:var(--warn);font:9px/1.4 var(--mono)}
+.workflow-warning strong{color:var(--t0)}
+.workflow-warning button{margin-top:2px}
+.workflow-stage{display:grid;grid-template-columns:.8fr 1fr 1.25fr 26px;gap:5px}
+.workflow-stage select{min-width:0}
+.workflow-stage button{padding:4px}
+.stage-certification-warning{grid-column:1/-1;padding:6px;border-left:2px solid var(--err);background:var(--ed);color:var(--err);font:9px/1.4 var(--mono)}
+.stage-certification-warning strong{color:var(--t0)}
+.workflow-summary{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--b0)}
+.workflow-summary>span{display:flex;gap:5px;border:1px solid var(--b0);border-radius:3px;padding:4px 6px;color:var(--t2);font:9px var(--mono)}
+.workflow-summary b{color:var(--t0)}

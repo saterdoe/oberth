@@ -45,9 +45,19 @@ type SupportedCLI struct {
 	executable string
 }
 
-func ClaudeCode() Adapter { return SupportedCLI{name: "claude-code", executable: "claude"} }
-func Codex() Adapter      { return SupportedCLI{name: "codex", executable: "codex"} }
-func OpenCode() Adapter   { return SupportedCLI{name: "opencode", executable: "opencode"} }
+func ClaudeCode() Adapter   { return SupportedCLI{name: "claude-code", executable: "claude"} }
+func Codex() Adapter        { return SupportedCLI{name: "codex", executable: "codex"} }
+func OpenCode() Adapter     { return SupportedCLI{name: "opencode", executable: "opencode"} }
+func Antigravity() Adapter  { return SupportedCLI{name: "antigravity", executable: "antigravity"} }
+
+func DefaultAgents() []Adapter {
+	return []Adapter{
+		Codex(),
+		ClaudeCode(),
+		OpenCode(),
+		Antigravity(),
+	}
+}
 
 func (a SupportedCLI) Name() string { return a.name }
 
@@ -132,6 +142,9 @@ func (a SupportedCLI) Execute(ctx context.Context, request Request) ([]byte, err
 		command = exec.CommandContext(ctx, executable, "exec", "--json", "-C", request.Worktree, prompt)
 	case "opencode":
 		command = exec.CommandContext(ctx, executable, "run", "--format", "json", prompt)
+		command.Dir = request.Worktree
+	case "antigravity":
+		command = exec.CommandContext(ctx, executable, "run", "--json", prompt)
 		command.Dir = request.Worktree
 	default:
 		return nil, fmt.Errorf("unsupported agent adapter %q", a.name)

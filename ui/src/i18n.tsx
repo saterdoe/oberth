@@ -121,7 +121,7 @@ export function useI18n(){return useContext(Context)}
 function CompatLocalization({children,locale}:{children:ReactNode;locale:Locale}){
   useLayoutEffect(()=>{
     const attributes=['aria-label','placeholder','title']
-    const protectedTerms=new Set(['Oberth','Ollama','OpenAI','Anthropic','Google','Qdrant','Claude Code','Codex CLI','OpenCode CLI','LM Studio','API key','Base URL','JSON','QA','Git','Vault'])
+    const protectedTerms=new Set(['Oberth','Ollama','OpenAI','Anthropic','Google','Qdrant','Claude Code','Codex CLI','OpenCode CLI','Antigravity','LM Studio','API key','Base URL','JSON','QA','Git','Vault'])
     const translateValue=(value:string)=>{
       const trimmed=value.trim(),translated=compatLookup[locale].get(trimmed)
       if(/\bv?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/.test(trimmed))return value

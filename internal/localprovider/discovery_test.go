@@ -32,3 +32,58 @@ func TestDiscoversRunningLocalInferenceServices(t *testing.T) {
 		t.Fatalf("openai models %v, running %v", models, running)
 	}
 }
+
+func TestDiscover(t *testing.T) {
+	candidates := Discover(context.Background())
+	if len(candidates) < 5 {
+		t.Fatalf("expected candidates list including ollama, lmstudio, and agents, got %d", len(candidates))
+	}
+	hasAntigravity := false
+	for _, c := range candidates {
+		if c.ID == "antigravity" {
+			hasAntigravity = true
+		}
+	}
+	if !hasAntigravity {
+		t.Fatalf("expected antigravity candidate in Discover()")
+	}
+}
+
+func TestAgentDisplayNameAndCandidateMessage(t *testing.T) {
+	if agentDisplayName("antigravity") != "Antigravity" {
+		t.Fatalf("expected Antigravity display name")
+	}
+	if agentDisplayName("unknown_id") != "unknown_id" {
+		t.Fatalf("expected fallback display name")
+	}
+
+	cReady := Candidate{Usable: true}
+	if candidateMessage(cReady, "help") != "Listo para usar." {
+		t.Fatalf("expected ready message")
+	}
+
+	cInstalled := Candidate{Installed: true}
+	if candidateMessage(cInstalled, "installed help") != "installed help" {
+		t.Fatalf("expected installed help message")
+	}
+
+	cNone := Candidate{}
+	if candidateMessage(cNone, "help") != "No detectado en este equipo." {
+		t.Fatalf("expected not detected message")
+	}
+}
+
+func TestAppInstalledChecks(t *testing.T) {
+	dWin := discoverer{goos: "windows", lookPath: func(name string) (string, error) { return "", nil }}
+	_ = dWin.lmStudioAppInstalled()
+	_ = dWin.claudeDesktopInstalled()
+
+	dMac := discoverer{goos: "darwin", lookPath: func(name string) (string, error) { return "", nil }}
+	_ = dMac.lmStudioAppInstalled()
+	_ = dMac.claudeDesktopInstalled()
+
+	dLinux := discoverer{goos: "linux", lookPath: func(name string) (string, error) { return "", nil }}
+	_ = dLinux.lmStudioAppInstalled()
+	_ = dLinux.claudeDesktopInstalled()
+}
+

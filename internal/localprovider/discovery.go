@@ -59,7 +59,7 @@ func (d discoverer) discover(ctx context.Context) []Candidate {
 	lmStudio.Usable = lmStudio.Running && len(lmStudio.Models) > 0
 	lmStudio.Message = candidateMessage(lmStudio, "Iniciá el servidor local y cargá un modelo desde LM Studio.")
 
-	agents := []agentadapter.Adapter{agentadapter.Codex(), agentadapter.ClaudeCode(), agentadapter.OpenCode()}
+	agents := agentadapter.DefaultAgents()
 	candidates := []Candidate{ollama, lmStudio}
 	for _, adapter := range agents {
 		capability, _ := adapter.Capabilities(ctx)
@@ -70,10 +70,12 @@ func (d discoverer) discover(ctx context.Context) []Candidate {
 			Evidence: capability.Evidence, Models: []string{},
 		})
 	}
-	if !candidates[3].Installed && d.claudeDesktopInstalled() {
-		candidates[3].Name = "Claude Desktop"
-		candidates[3].Installed = true
-		candidates[3].Message = "Claude Desktop está instalado, pero no reemplaza Claude Code ni expone un harness compatible."
+	for i, c := range candidates {
+		if c.ID == "claude-code" && !c.Installed && d.claudeDesktopInstalled() {
+			candidates[i].Name = "Claude Desktop"
+			candidates[i].Installed = true
+			candidates[i].Message = "Claude Desktop está instalado, pero no reemplaza Claude Code ni expone un harness compatible."
+		}
 	}
 	return candidates
 }
@@ -86,6 +88,8 @@ func agentDisplayName(id string) string {
 		return "Claude Code"
 	case "opencode":
 		return "OpenCode"
+	case "antigravity":
+		return "Antigravity"
 	default:
 		return id
 	}

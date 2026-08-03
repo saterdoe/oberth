@@ -1,6 +1,6 @@
 # Quickstart
 
-Oberth 0.1.0-alpha.1 is a Public Alpha. Use a test repository or one with a
+Oberth 0.1.0-alpha.2 is a Public Alpha. Use a test repository or one with a
 clean backup, and review every generated change before approval.
 
 ## Requirements
@@ -124,6 +124,8 @@ Linux or macOS:
   is running.
 - Provider failure: verify the base URL, model availability and credentials.
 - Interrupted task: restart the service and run `oberth resume`.
+- Blocked or failed task: use **Close task** to cancel it while preserving its
+  conversation, evidence and isolated worktree for later inspection.
 - Promotion blocked: clean or commit unrelated checkout changes, then review
   the preserved task branch before retrying.
 - Unexpected behavior after an upgrade: check [CHANGELOG.md](../CHANGELOG.md)

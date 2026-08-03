@@ -26,6 +26,15 @@ type Searcher struct {
 	queryCache  map[string]queryEmbeddingEntry
 }
 
+// Embedder exposes the configured embedding contract to repository-scoped
+// indexes without coupling them to the Vault vector collection.
+func (s *Searcher) Embedder() Embedder {
+	if s == nil {
+		return nil
+	}
+	return s.embedder
+}
+
 type queryEmbeddingEntry struct {
 	vector    []float32
 	expiresAt time.Time

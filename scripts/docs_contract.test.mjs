@@ -8,7 +8,7 @@ const required = {
   'README.md': [
     'Coding agents, under control.',
     'Public Alpha',
-    '0.1.0-alpha.1',
+    '0.1.0-alpha.2',
     'docs/QUICKSTART.md',
     'Apache-2.0',
   ],
@@ -35,7 +35,7 @@ const required = {
     'Reporting a vulnerability',
     'Security boundaries',
   ],
-  'CHANGELOG.md': ['Unreleased', '0.1.0-alpha.1'],
+  'CHANGELOG.md': ['Unreleased', '0.1.0-alpha.2', '0.1.0-alpha.1'],
   'THIRD_PARTY_NOTICES.md': ['Third-party notices', 'Apache-2.0', 'MPL-2.0'],
   'LICENSE': ['Apache License', 'Version 2.0'],
 }
@@ -50,7 +50,7 @@ for (const [file, sections] of Object.entries(required)) {
 
 const packageVersion = JSON.parse(read('package.json')).version
 const uiVersion = JSON.parse(read('ui/package.json')).version
-assert.equal(packageVersion, '0.1.0-alpha.1')
+assert.equal(packageVersion, '0.1.0-alpha.2')
 assert.equal(uiVersion, packageVersion)
 assert.ok(read('README.md').includes('LICENSE'), 'README must link the license')
 

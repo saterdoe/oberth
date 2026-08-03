@@ -27,6 +27,8 @@ func Classify(err error) Block {
 		return Block{"budget_exhausted", err.Error(), "Increase the run budget or narrow the intention.", true}
 	case errors.Is(err, agentruntime.ErrModelFormatExhausted):
 		return Block{"model_response_unusable", "The selected model did not produce a usable action after automatic recovery.", "Retry with another local model or simplify the requested change.", true}
+	case errors.Is(err, agentruntime.ErrActionLoop):
+		return Block{"agent_action_loop", "The model repeated an action without making progress.", "Retry with a narrower request or a model with stronger tool-use support.", true}
 	case errors.Is(err, agentruntime.ErrInvalidAction):
 		return Block{"invalid_model_format", err.Error(), "Retry with a certified structured-output model.", true}
 	case strings.Contains(lower, "approval"):

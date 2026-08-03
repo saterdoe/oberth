@@ -558,9 +558,9 @@ export const compatTranslations:CompatTranslation[]=[
     "es": "· árbol de trabajo"
   },
   {
-    "source": "✅ Cambios aplicados al checkout principal.",
-    "en": "✅ Changes applied to the main checkout.",
-    "es": "✅ Cambios aplicados al checkout principal."
+    "source": "Cambios aplicados al checkout principal.",
+    "en": "Changes applied to the main checkout.",
+    "es": "Cambios aplicados al checkout principal."
   },
   {
     "source": "Entorno aislado · El checkout principal no cambia hasta que aceptes.",
@@ -568,9 +568,9 @@ export const compatTranslations:CompatTranslation[]=[
     "es": "Entorno aislado · El checkout principal no cambia hasta que aceptes."
   },
   {
-    "source": "✅ Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración.",
-    "en": "✅ Changes applied to the repository. Write a new intent above and use “Request New Change” for the next iteration.",
-    "es": "✅ Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración."
+    "source": "Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración.",
+    "en": "Changes applied to the repository. Write a new intent above and use “Request New Change” for the next iteration.",
+    "es": "Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración."
   },
   {
     "source": "task-error session-decision",
@@ -760,7 +760,7 @@ export const compatTranslations:CompatTranslation[]=[
   {
     "source": "+ tokens:",
     "en": "+ tokens:",
-    "es": "+ fichas:"
+    "es": "+ tokens:"
   },
   {
     "source": "costo: $",
@@ -820,7 +820,7 @@ export const compatTranslations:CompatTranslation[]=[
   {
     "source": "tokens",
     "en": "tokens",
-    "es": "fichas"
+    "es": "tokens"
   },
   {
     "source": "sin reducción necesaria",
@@ -835,7 +835,7 @@ export const compatTranslations:CompatTranslation[]=[
   {
     "source": "tokens seleccionados",
     "en": "selected tokens",
-    "es": "fichas seleccionadas"
+    "es": "tokens seleccionados"
   },
   {
     "source": "fuentes usadas ·",
@@ -1060,7 +1060,7 @@ export const compatTranslations:CompatTranslation[]=[
   {
     "source": "tokens por revisar",
     "en": "tokens to review",
-    "es": "fichas para revisar"
+    "es": "tokens para revisar"
   },
   {
     "source": "Buscar en Vault",
@@ -1334,18 +1334,18 @@ export const compatTranslations:CompatTranslation[]=[
   },
   {
     "source": "Ollama",
-    "en": "To be",
-    "es": "Ser"
+    "en": "Ollama",
+    "es": "Ollama"
   },
   {
     "source": "OpenAI",
     "en": "OpenAI",
-    "es": "AbiertoAI"
+    "es": "OpenAI"
   },
   {
     "source": "Anthropic",
     "en": "Anthropic",
-    "es": "antrópico"
+    "es": "Anthropic"
   },
   {
     "source": "Google",
@@ -1360,7 +1360,7 @@ export const compatTranslations:CompatTranslation[]=[
   {
     "source": "Base URL",
     "en": "Base URL",
-    "es": "URL básica"
+    "es": "URL base"
   },
   {
     "source": "API key",

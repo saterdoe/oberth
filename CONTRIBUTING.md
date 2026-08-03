@@ -1,6 +1,6 @@
 # Contributing to Oberth
 
-Oberth 0.1.0-alpha.1 is a Public Alpha. Focused bug reports, reproducible test
+Oberth 0.1.0-alpha.2 is a Public Alpha. Focused bug reports, reproducible test
 cases, documentation fixes and small improvements are especially valuable
 while public interfaces are still taking shape.
 
@@ -55,6 +55,13 @@ A locale contribution should:
 - include the locale in the language selector;
 - add or update tests for fallback and persisted language selection;
 - avoid changing application behavior in the translation commit.
+
+Use semantic keys for every new application label. Do not pass task titles,
+user or model messages, repository paths, identifiers, source code, command
+output, or backend diagnostics through the translation layer. Mark those
+dynamic values with `data-no-translate` when they are rendered inside localized
+UI. Compatibility replacements exist only for migrating legacy labels; do not
+add substring replacements. Test both bundled locales when changing UI copy.
 
 Missing keys must fall back to English. A build or test should fail when a
 bundled catalog has missing, extra or malformed keys.

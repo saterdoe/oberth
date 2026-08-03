@@ -7,7 +7,7 @@ them your main checkout. Each task runs in an isolated Git worktree, records the
 commands and checks it performed, and waits for a human decision before its
 changes can be promoted.
 
-> **Public Alpha · 0.1.0-alpha.1**
+> **Public Alpha · 0.1.0-alpha.2**
 >
 > Oberth is ready for evaluation, not unattended production use. Interfaces,
 > configuration and storage formats may change before beta. Start with a test
@@ -37,6 +37,10 @@ Oberth preserves the isolated result instead of applying a partial promotion.
 - Reviewable diffs, command logs and verification evidence.
 - Explicit approve, correct, reject and cancel decisions.
 - Local persistence and recovery for interrupted work.
+
+The interface is available in English and Spanish. Localization applies to
+Oberth's application chrome; user and model messages, repository paths,
+identifiers, source code and technical evidence are always preserved verbatim.
 
 Windows is the primary tested desktop platform in this alpha. The CLI and
 service run on Linux and macOS with less release coverage. Oberth is currently
@@ -175,6 +179,7 @@ persists across restarts. To contribute another locale, follow
 
 - [Quickstart](docs/QUICKSTART.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Repository code index](docs/CODE_INDEX.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)

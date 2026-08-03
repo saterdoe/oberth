@@ -55,10 +55,11 @@ describe('task workspace', () => {
         return ok(made, 201)
       }
       if (url.includes('/tasks?')) return ok({ tasks: taskFixtures })
-      if (url.endsWith('/status')) return ok({ server: { state: 'healthy' } })
+      if (url.endsWith('/status')) return ok({ server: { state: 'healthy', version: '9.8.7-test' } })
       if (url.endsWith('/sessions?limit=30')) return ok({ sessions: [] })
       if (url.endsWith('/costs')) return ok({})
       if (url.endsWith('/projects')) return ok(projectFixtures)
+      if (url.endsWith('/projects/project-1/code-index')) return ok({schema_version:'1',repo_id:'repo:test',indexed_files:12,chunk_count:34,last_indexed:new Date().toISOString(),fresh:true})
       if (url.includes('/git/status?path=')) return ok({ files: [], branch: 'main' })
       if (url.endsWith('/git/diff')) return ok({ files: [] })
       if (url.includes('/verifier/plan?path=')) return ok({ commands: [] })
@@ -78,9 +79,28 @@ describe('task workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Recent tasks' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'Open session for Revisar autenticación' }))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Nueva solicitud' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New request' }))
     expect(await screen.findByRole('combobox', { name: 'Repositorio' })).toHaveValue('project-1')
     expect(screen.getByRole('button', { name: 'Session' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('loads recent tasks in descending activity order without rendering the full list initially', async () => {
+    const base=Date.now()
+    taskFixtures=Array.from({length:14},(_,index)=>({
+      id:`task-${index}`,repository_id:'project-1',title:`Task ${index}`,description:`Description ${index}`,
+      task_type:'implementation',status:'completed',created_at:new Date(base-index*1000).toISOString(),updated_at:new Date(base-index*1000).toISOString(),
+    }))
+    render(<App />)
+
+    expect(await screen.findByRole('button',{name:'Open session for Task 0'})).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Open session for Task 8'})).not.toBeInTheDocument()
+    const visible=screen.getAllByRole('button',{name:/Open session for Task/})
+    expect(visible).toHaveLength(8)
+    expect(visible[0]).toHaveAccessibleName('Open session for Task 0')
+
+    fireEvent.click(screen.getByRole('button',{name:'Show more (6)'}))
+    expect(screen.getAllByRole('button',{name:/Open session for Task/})).toHaveLength(14)
+    expect(screen.getByRole('button',{name:'Open session for Task 13'})).toBeInTheDocument()
   })
 
   it('creates a task from the Session workspace', async () => {
@@ -194,7 +214,14 @@ describe('task workspace', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button',{name:'Session'}))
     fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
-    fireEvent.click(await screen.findByRole('button',{name:'Configurar reintento'}))
+    const closeTask=screen.getByRole('button',{name:'■ Close task'})
+    expect(closeTask).toBeEnabled()
+    fireEvent.click(closeTask)
+    await waitFor(()=>expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/tasks/task-failed/cancel'),
+      expect.objectContaining({method:'POST'}),
+    ))
+    fireEvent.click(await screen.findByRole('button',{name:'Configure retry'}))
     expect(screen.getByText('Elegí cómo ejecutar el nuevo intento')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox',{name:'Modelo 1'}),{target:{value:'large'}})
     fireEvent.click(screen.getByRole('button',{name:'Agregar etapa'}))
@@ -226,7 +253,7 @@ describe('task workspace', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button',{name:'Session'}))
     fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
-    fireEvent.click(await screen.findByRole('button',{name:'Configurar reintento'}))
+    fireEvent.click(await screen.findByRole('button',{name:'Configure retry'}))
 
     expect(screen.getByRole('combobox',{name:'Rol 1'})).toHaveValue('development')
     expect(screen.getByRole('combobox',{name:'Proveedor 1'})).toHaveValue('ollama')
@@ -345,8 +372,29 @@ describe('task workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use in Oberth' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/v1\/providers$/),
-      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"default_model":"qwen-coder"') }),
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"name":"Ollama"') }),
     ))
+  })
+
+  it('loads the runtime version and exposes repository code-index status', async () => {
+    render(<App />)
+    expect(await screen.findAllByText(/9\.8\.7-test/)).toHaveLength(2)
+    fireEvent.click(screen.getAllByText('Settings')[0])
+    expect(await screen.findByText('12 files · 34 chunks')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Reindex'})).toBeInTheDocument()
+  })
+
+  it('reveals project code-index status in small batches', async () => {
+    projectFixtures=Array.from({length:6},(_,index)=>({id:`project-${index}`,name:`Project ${index}`,path:`C:\\dev\\project-${index}`}))
+    render(<App />)
+    fireEvent.click(screen.getAllByText('Settings')[0])
+    expect(await screen.findByText('Project 0')).toBeInTheDocument()
+    expect(screen.getByText('Project 3')).toBeInTheDocument()
+    expect(screen.queryByText('Project 4')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Show more (2)'}))
+    expect(screen.getByText('Project 5')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Show less'}))
+    expect(screen.queryByText('Project 4')).not.toBeInTheDocument()
   })
 
   it('clears provider credentials from the form immediately after saving', async () => {

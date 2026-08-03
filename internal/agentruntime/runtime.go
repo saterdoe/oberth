@@ -15,6 +15,7 @@ var (
 	ErrTurnLimit            = errors.New("agent turn limit reached")
 	ErrInvalidAction        = errors.New("invalid typed agent action")
 	ErrModelFormatExhausted = errors.New("model response remained unusable after format recovery")
+	ErrActionLoop           = errors.New("model repeated the same action without progress")
 	ErrBudgetExceeded       = errors.New("agent budget exceeded")
 )
 
@@ -103,6 +104,8 @@ func Run(ctx context.Context, systemPrompt, intention string, cfg Config) (Resul
 	formatRetries := 0
 	protocolRetries := 0
 	unresolvedUnknowns := map[string]struct{}{}
+	lastAction := ""
+	repeatedActions := 0
 	for turn := 1; turn <= cfg.MaxTurns; turn++ {
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -147,6 +150,19 @@ func Run(ctx context.Context, systemPrompt, intention string, cfg Config) (Resul
 		if fallback {
 			result.JSONFallbacks++
 		}
+		fingerprint := action.Tool + "\x00" + string(action.Arguments)
+		if fingerprint == lastAction {
+			repeatedActions++
+			if repeatedActions >= 3 {
+				return result, ErrActionLoop
+			}
+			messages = append(messages,
+				Message{Role: "assistant", Content: response.Content},
+				Message{Role: "user", Content: "Loop correction: that exact action already succeeded and repeating it adds no evidence. Do not call it again. Use a different search/read action if information is missing; otherwise return finish with a direct summary. For a read-only question, no verification command is required."},
+			)
+			continue
+		}
+		lastAction, repeatedActions = fingerprint, 0
 		if action.Tool == "finish" {
 			// A model must not be allowed to turn a failed mutation or verification
 			// into a successful-looking summary. Give it one protocol correction per

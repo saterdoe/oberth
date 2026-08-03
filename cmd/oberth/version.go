@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/saterdoe/oberth/internal/buildinfo"
 	"github.com/spf13/cobra"
 )
 
 var (
-	Version   = "0.1.0-alpha.1"
+	Version   = buildinfo.Version
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )

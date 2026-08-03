@@ -18,11 +18,13 @@ import (
 	"github.com/saterdoe/oberth/internal/agentprofile"
 	"github.com/saterdoe/oberth/internal/agentruntime"
 	"github.com/saterdoe/oberth/internal/blockreason"
+	"github.com/saterdoe/oberth/internal/codeindex"
 	semcontext "github.com/saterdoe/oberth/internal/context"
 	"github.com/saterdoe/oberth/internal/cost"
 	"github.com/saterdoe/oberth/internal/db"
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/gateway"
+	"github.com/saterdoe/oberth/internal/permission"
 	"github.com/saterdoe/oberth/internal/reasoning"
 	"github.com/saterdoe/oberth/internal/tasktype"
 	workspacepkg "github.com/saterdoe/oberth/internal/workspace"
@@ -37,7 +39,7 @@ var taskTransitions = map[string]map[string]bool{
 	"review":    {"running": true, "completed": true, "cancelled": true},
 	"blocked":   {"running": true, "cancelled": true},
 	"failed":    {"running": true, "cancelled": true},
-	"completed": {}, "cancelled": {},
+	"completed": {"running": true}, "cancelled": {},
 }
 
 type taskRunResponse struct {
@@ -56,6 +58,56 @@ type taskExecutionStage struct {
 
 type taskExecutionPlan struct {
 	ExecutionPlan []taskExecutionStage `json:"execution_plan"`
+}
+
+func isReadOnlyRequest(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if strings.Contains(normalized, "?") || strings.Contains(normalized, "¿") {
+		return true
+	}
+	for _, prefix := range []string{"where ", "how ", "what ", "which ", "explain ", "donde ", "dónde ", "como ", "cómo ", "que ", "qué ", "cual ", "cuál "} {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func taskInteractionMode(constraints json.RawMessage) string {
+	var value struct {
+		InteractionMode string `json:"interaction_mode"`
+	}
+	if json.Unmarshal(constraints, &value) != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(value.InteractionMode))
+}
+
+func taskHasApprovedPlan(constraints json.RawMessage) bool {
+	var value struct {
+		ApprovedPlan string `json:"approved_plan"`
+	}
+	return json.Unmarshal(constraints, &value) == nil && strings.TrimSpace(value.ApprovedPlan) != ""
+}
+
+func modelTaskConstraints(constraints json.RawMessage, interactionMode string) json.RawMessage {
+	var value map[string]any
+	if json.Unmarshal(constraints, &value) != nil {
+		return constraints
+	}
+	messages, _ := value["conversation"].([]any)
+	limit := 12
+	if interactionMode == "implementation" {
+		limit = 4
+	}
+	if len(messages) > limit {
+		value["conversation"] = messages[len(messages)-limit:]
+	}
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return constraints
+	}
+	return normalized
 }
 
 func parseTaskExecutionPlan(raw json.RawMessage) []taskExecutionStage {
@@ -600,15 +652,34 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 			}
 		}
 	}()
-	prompt := secretspkg.Redact(agentprofile.BuildTaskPrompt(task.Title, task.Description, task.Constraints))
+	interactionMode := taskInteractionMode(task.Constraints)
+	prompt := secretspkg.Redact(agentprofile.BuildTaskPrompt(task.Title, task.Description, modelTaskConstraints(task.Constraints, interactionMode)))
+	readOnlyRequest := interactionMode == "query" || interactionMode == "plan" || (interactionMode == "" && isReadOnlyRequest(task.Title+" "+task.Description))
 	contextPipeline := semcontext.NewPipeline(s.vaultConn, s.searcher)
 	retrievalMetrics := semcontext.RetrievalMetrics{}
 	compileOptions := semcontext.CompileOptions{
-		Mode:                semcontext.ModeDev,
-		MaxTokens:           s.cfg.Context.MaxTokens,
-		ReserveOutputTokens: s.cfg.Context.ReserveOutputTokens,
-		MaxSourcesPerKind:   s.cfg.Context.MaxSourcesPerKind,
-		Cache:               s.contextCache,
+		Mode:                  semcontext.ModeDev,
+		MaxTokens:             s.cfg.Context.MaxTokens,
+		ReserveOutputTokens:   s.cfg.Context.ReserveOutputTokens,
+		MaxSourcesPerKind:     s.cfg.Context.MaxSourcesPerKind,
+		Cache:                 s.contextCache,
+		DisableCodeIndex:      !s.cfg.CodeIndex.IsEnabled(),
+		CodeIndex:             codeindex.Options{MaxFileBytes: s.cfg.CodeIndex.MaxFileBytes, MaxFiles: s.cfg.CodeIndex.MaxFiles, MaxChunks: s.cfg.CodeIndex.MaxChunks, MaxChunkLines: s.cfg.CodeIndex.MaxChunkLines, OverlapLines: s.cfg.CodeIndex.OverlapLines, Exclude: s.cfg.CodeIndex.Exclude},
+		CodeIndexIdentityRoot: run.BaseRepo,
+	}
+	modelOutputTokens := 0
+	localOllama := false
+	if id, parseErr := uuid.Parse(providerID); parseErr == nil {
+		if selected, providerErr := s.providers.GetByID(ctx, id); providerErr == nil {
+			compileOptions = contextOptionsForProvider(compileOptions, selected.ProviderType)
+			if strings.EqualFold(strings.TrimSpace(selected.ProviderType), "ollama") {
+				localOllama = true
+				modelOutputTokens = 800
+				if readOnlyRequest {
+					modelOutputTokens = 400
+				}
+			}
+		}
 	}
 	if s.searcher != nil {
 		compileOptions.Expand = func(expandCtx context.Context, _ int) ([]semcontext.ContextSource, error) {
@@ -648,7 +719,7 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 		})
 		session.ContextUsed = manifest
 		if strings.TrimSpace(compiled.Context) != "" {
-			prompt += "\n\n## Traced repository context\n" + secretspkg.Redact(compiled.Context)
+			prompt += "\n\n## Traced repository context\nEach excerpt begins with its canonical repository path and line range. Markdown headings inside an excerpt are content, never filenames. Only pass an exact canonical path shown at the start of an excerpt to read. The excerpts themselves may be used as evidence without reading them again.\n\n" + secretspkg.Redact(compiled.Context)
 		}
 		_ = s.appendRunEvent(ctx, run.ID, "context_compiled", map[string]any{
 			"manifest":   compiled.Manifest,
@@ -709,14 +780,56 @@ Before finish, run at least one allowed verification command. The safe baseline
 for every repository is command {"program":"git","args":["diff","--check"]}.
 Other allowed verification commands are go test, go vet, npm test,
 npm run test, npm run typecheck, npm run build, cargo test, and pytest.
+Do not run pytest unless the repository already contains Python tests or Python test configuration.
+For a new dependency-free script with no tests, use only git diff --check.
 Never call a command outside this allowlist.
 To add a file, use patch arguments {"operation":"create","path":"relative/path","new_text":"..."};
 otherwise provide old_text that matches exactly once and an optional expected_hash.
+The repository map is authoritative for path existence. Do not read a required file that is absent from that map; create it directly with patch operation create.
 Use finish only after inspecting the result and include a concise summary.`
+	if readOnlyRequest {
+		if interactionMode == "plan" {
+			typedSystemPrompt = `You produce a proposed implementation plan for a source repository. Use the traced repository context and conversation supplied by the user. Do not modify files. Return a concrete, reviewable plan in prose. Respect the requested plan size and file constraints; do not add tests, files, risks, or extra sections that the user excluded or that are unnecessary for the requested scope. Do not emit JSON or tool calls. The plan will only be implemented after the user approves it.`
+		} else {
+			typedSystemPrompt = `You answer questions in an ongoing software conversation. Focus on the latest Description and use the conversation history for continuity. For general engineering concepts, use established technical knowledge. For claims about this specific repository, rely only on the traced repository context and cite canonical files; do not invent repository behavior. Answer directly in the language of the latest question. Do not emit JSON, tool calls, patches, plans, or meta-commentary. If repository evidence is incomplete, separate what is generally true from what is actually confirmed here.`
+		}
+	}
 	runtimeEvidence["prompt_contract"] = map[string]any{
 		"id": "typed-agent", "version": "1", "schema_version": "1",
 		"template_hash": fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(typedSystemPrompt))),
 		"capabilities":  []string{"typed_actions", "read", "search", "patch", "record_reasoning", "stop_insufficient_evidence", "command", "finish"},
+	}
+	runtimeEvidence["interaction_mode"] = map[bool]string{true: "query", false: "implementation"}[readOnlyRequest]
+	if interactionMode != "" {
+		runtimeEvidence["interaction_mode"] = interactionMode
+	}
+	availableTools := agentToolDefinitions()
+	if localOllama && strings.Contains(strings.ToLower(model), "qwen3") {
+		// Qwen3 otherwise spends most of a CPU-only run in hidden deliberation.
+		// The switch must appear in the latest user turn as well as the system
+		// prompt; Qwen's chat template does not consistently honor it otherwise.
+		typedSystemPrompt = "/no_think\n" + typedSystemPrompt
+		prompt = "/no_think\n" + prompt
+	}
+	if readOnlyRequest {
+		availableTools = nil
+		runtimeEvidence["prompt_contract"].(map[string]any)["capabilities"] = []string{"semantic_context", "direct_answer"}
+	} else if localOllama {
+		availableTools = localImplementationToolDefinitions()
+		runtimeEvidence["prompt_contract"].(map[string]any)["capabilities"] = []string{"typed_actions", "read", "search", "patch", "command", "finish"}
+		typedSystemPrompt = strings.ReplaceAll(typedSystemPrompt, "read|search|patch|record_reasoning|stop_insufficient_evidence|command|finish", "read|search|patch|command|finish")
+		typedSystemPrompt = strings.ReplaceAll(typedSystemPrompt, `Use record_reasoning for material facts, hypotheses, assumptions, unknowns,
+acceptance properties, reproducible experiments and the final decision. Record concise reviewable claims,
+not private chain-of-thought. Link claims to evidence IDs when evidence exists.
+Experiments preserve question, environment, command, expectation, observation,
+duration/cost, evidence IDs, affected claims and optional base/candidate fingerprints.
+Successful reads, searches and commands include an automatic evidence.id in
+their observation; cite that ID instead of inventing an evidence reference.
+An unknown must name the smallest next action that could resolve it.
+If an unresolved unknown makes a safe change unjustifiable, use
+stop_insufficient_evidence with that unknown_id and a concise summary. This is
+a legitimate outcome and does not require a verification command.
+`, "")
 	}
 	runtimeWorkspace, workspaceErr := workspacepkg.NewRuntime(run.ID.String(), run.WorktreePath, s.perm)
 	if workspaceErr != nil {
@@ -735,6 +848,15 @@ Use finish only after inspecting the result and include a concise summary.`
 			// Ollama is observable and free of per-request quota, so a larger turn
 			// budget is safer than declaring a healthy model timed out mid-change.
 			maxIterations = 24
+		}
+	}
+	toolApprovalResolver := s.resolveApproval
+	if interactionMode == "implementation" && taskHasApprovedPlan(task.Constraints) {
+		toolApprovalResolver = func(approvalCtx context.Context, request permission.Request) (permission.Decision, bool) {
+			if request.Operation == "file.write" {
+				return permission.Allow, true
+			}
+			return s.resolveApproval(approvalCtx, request)
 		}
 	}
 	agentResult, err := agentruntime.Run(gateway.WithAuditSessionID(ctx, session.ID.String()), typedSystemPrompt, prompt, agentruntime.Config{
@@ -774,14 +896,14 @@ Use finish only after inspecting the result and include a concise summary.`
 			for _, message := range messages {
 				llmMessages = append(llmMessages, llm.Message{Role: message.Role, Content: message.Content})
 			}
-			response, err := s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1", ProviderID: providerID, Model: model, Tools: agentToolDefinitions()}, llmMessages, func(content string) {
+			response, err := s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1", ProviderID: providerID, Model: model, Tools: availableTools, MaxTokens: modelOutputTokens}, llmMessages, func(content string) {
 				s.broadcastTaskChunk(task.ID, session.ID, content)
 			})
 			if err != nil {
 				lower := strings.ToLower(err.Error())
 				if strings.Contains(lower, "tool") || strings.Contains(lower, "function") || strings.Contains(lower, "400") {
 					structuredTransportFallbacks++
-					response, err = s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1-fallback", ProviderID: providerID, Model: model}, llmMessages, func(content string) {
+					response, err = s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1-fallback", ProviderID: providerID, Model: model, MaxTokens: modelOutputTokens}, llmMessages, func(content string) {
 						s.broadcastTaskChunk(task.ID, session.ID, content)
 					})
 				}
@@ -803,6 +925,18 @@ Use finish only after inspecting the result and include a concise summary.`
 					action["summary"] = arguments["summary"]
 				}
 				encoded, _ := json.Marshal(action)
+				content = string(encoded)
+			} else if readOnlyRequest && strings.TrimSpace(response.Content) != "" {
+				// A direct answer is the expected terminal response for read-only
+				// questions. Local OpenAI-compatible models frequently return it as
+				// content instead of invoking the finish tool.
+				summary := strings.TrimSpace(response.Content)
+				encoded, _ := json.Marshal(map[string]any{
+					"schema_version": "1",
+					"tool":           "finish",
+					"arguments":      map[string]any{"summary": summary},
+					"summary":        summary,
+				})
 				content = string(encoded)
 			} else if summary, ok := finishAfterSuccessfulVerification(messages, response.Content); ok {
 				// Some OpenAI-compatible local reasoning models correctly use
@@ -833,7 +967,7 @@ Use finish only after inspecting the result and include a concise summary.`
 			return agentruntime.ModelResponse{Content: content, Model: response.Model, InputTokens: response.InputTokens, OutputTokens: response.OutputTokens}, nil
 		},
 		Execute: func(toolCtx context.Context, action agentruntime.Action) agentruntime.Observation {
-			return executeTypedTool(toolCtx, runtimeWorkspace, run.ID.String(), task.ID.String(), session.ID.String(), task.TaskType, task.Risk, s.perm, s.resolveApproval, action)
+			return executeTypedTool(toolCtx, runtimeWorkspace, run.ID.String(), task.ID.String(), session.ID.String(), task.TaskType, task.Risk, s.perm, toolApprovalResolver, action)
 		},
 		OnTurn: func(turn int, action agentruntime.Action, observation *agentruntime.Observation) {
 			attachAutomaticEvidence(turn, action, observation)
@@ -853,6 +987,23 @@ Use finish only after inspecting the result and include a concise summary.`
 			_ = s.appendRunEvent(ctx, run.ID, "agent_turn", payload)
 		},
 	})
+	if readOnlyRequest && compiled != nil && strings.TrimSpace(agentResult.Summary) != "" {
+		seenPaths := map[string]bool{}
+		paths := make([]string, 0, len(compiled.Manifest))
+		for _, source := range compiled.Manifest {
+			if source.Kind != "code" && source.Kind != "configuration" && source.Kind != "documentation" {
+				continue
+			}
+			path := strings.SplitN(source.ID, ":", 2)[0]
+			if path != "" && !seenPaths[path] {
+				seenPaths[path] = true
+				paths = append(paths, path)
+			}
+		}
+		if len(paths) > 0 {
+			agentResult.Summary += "\n\nRepository sources:\n- `" + strings.Join(paths, "`\n- `") + "`"
+		}
+	}
 	resp := &llm.ChatResponse{
 		Model: agentResult.Model, Content: agentResult.Summary,
 		InputTokens: agentResult.InputTokens, OutputTokens: agentResult.OutputTokens,
@@ -1012,7 +1163,7 @@ Use finish only after inspecting the result and include a concise summary.`
 		_ = s.sessions.Update(durableCtx, session)
 		return
 	}
-	if verificationStatus != "passed" {
+	if !readOnlyRequest && verificationStatus != "passed" {
 		runState = "blocked"
 		session.Status = "blocked"
 		cause := "the agent finished without executing a verification command"
@@ -1057,6 +1208,14 @@ Use finish only after inspecting the result and include a concise summary.`
 			}
 		}
 	}
+	if readOnlyRequest {
+		session.Status = "completed"
+		runState = "completed"
+		_ = s.sessions.Update(durableCtx, session)
+		_ = s.tasks.SetStatus(durableCtx, task.ID, []string{"running"}, "completed")
+		s.broadcastTaskEvent("completed", session.ID, agentResult.Summary)
+		return
+	}
 	session.Status = "review"
 	runState = "review"
 	_ = s.sessions.Update(durableCtx, session)
@@ -1066,6 +1225,24 @@ Use finish only after inspecting the result and include a concise summary.`
 	fallbackMemory := verifiedRunMemoryProposal(run.ID, task.Title, reasoningCase, memoryDiff)
 	s.createMemoryCandidates(durableCtx, run, reasoningCase, agentResult.Summary, fallbackMemory)
 	s.broadcastTaskEvent("review", session.ID, agentResult.Summary)
+}
+
+func contextOptionsForProvider(options semcontext.CompileOptions, providerType string) semcontext.CompileOptions {
+	if !strings.EqualFold(strings.TrimSpace(providerType), "ollama") {
+		return options
+	}
+	// Keep a bounded local profile while leaving enough room to benefit from
+	// larger Ollama context windows configured by the user.
+	if options.MaxTokens <= 0 || options.MaxTokens > 8000 {
+		options.MaxTokens = 8000
+	}
+	if options.ReserveOutputTokens <= 0 || options.ReserveOutputTokens > 1500 {
+		options.ReserveOutputTokens = 1500
+	}
+	if options.MaxSourcesPerKind <= 0 || options.MaxSourcesPerKind > 4 {
+		options.MaxSourcesPerKind = 4
+	}
+	return options
 }
 
 func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, stage taskExecutionStage, taskPrompt, extraContext string) (string, error) {
@@ -1160,9 +1337,20 @@ func (s *Server) handleCancelTask(w http.ResponseWriter, r *http.Request) {
 	}
 	s.runsMu.Unlock()
 	if !ok {
-		if task, err := s.tasks.GetByID(r.Context(), id); err == nil && task.Status == "cancelled" {
-			respondJSON(w, 200, map[string]string{"status": "cancelled"})
-			return
+		if task, err := s.tasks.GetByID(r.Context(), id); err == nil {
+			if task.Status == "cancelled" {
+				respondJSON(w, 200, map[string]string{"status": "cancelled"})
+				return
+			}
+			if task.Status == "blocked" || task.Status == "failed" {
+				if err := s.tasks.SetStatus(r.Context(), id, []string{task.Status}, "cancelled"); err != nil {
+					respondError(w, 409, "TASK_STATE_CONFLICT", "task status changed before it could be cancelled", nil)
+					return
+				}
+				s.broadcastTaskEvent("cancelled", id, task.Title)
+				respondJSON(w, 200, map[string]string{"status": "cancelled"})
+				return
+			}
 		}
 		respondError(w, 409, "NOT_RUNNING", "task has no active execution", nil)
 		return

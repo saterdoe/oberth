@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/saterdoe/oberth/internal/codeindex"
 )
 
 type ContextSource struct {
@@ -19,14 +22,17 @@ type ContextSource struct {
 }
 
 type CompileOptions struct {
-	MaxTokens           int
-	ReserveOutputTokens int
-	RepoSources         []ContextSource
-	Expand              func(context.Context, int) ([]ContextSource, error)
-	MaxExpansionRounds  int
-	MaxSourcesPerKind   int
-	Mode                ContextMode
-	Cache               *CompilationCache
+	MaxTokens             int
+	ReserveOutputTokens   int
+	RepoSources           []ContextSource
+	Expand                func(context.Context, int) ([]ContextSource, error)
+	MaxExpansionRounds    int
+	MaxSourcesPerKind     int
+	Mode                  ContextMode
+	Cache                 *CompilationCache
+	CodeIndex             codeindex.Options
+	DisableCodeIndex      bool
+	CodeIndexIdentityRoot string
 }
 
 type SourceSelection struct {
@@ -260,6 +266,14 @@ func rankAndDeduplicate(sources []ContextSource, query, taskType string, mode Co
 		score := float64(source.Priority)*1000 + source.Relevance*100
 		lower := strings.ToLower(source.Content)
 		sourcePath := strings.ToLower(strings.Split(source.ID, ":")[0])
+		queryLower := strings.ToLower(query)
+		storageIntent := strings.Contains(queryLower, "stored") || strings.Contains(queryLower, "storage") || strings.Contains(queryLower, "persist") || strings.Contains(queryLower, "guardad") || strings.Contains(queryLower, "datos")
+		if storageIntent && strings.Contains(filepath.ToSlash(sourcePath), "storage/") {
+			score += 100_000
+			if source.Reason == "" {
+				source.Reason = "storage path matches persistence intent"
+			}
+		}
 		if sourcePath != "" && strings.Contains(strings.ToLower(query), sourcePath) {
 			score += 1_000_000
 			if source.Reason == "" {

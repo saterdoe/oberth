@@ -400,9 +400,10 @@ func (e *StepExecutor) ExecuteStep(ctx context.Context, step Step, messages []ll
 			continue
 		}
 		resp, err := e.executeAdaptive(ctx, step.ID, link.providerID, link.model, provider, llm.ChatRequest{
-			Model:    link.model,
-			Messages: messages,
-			Tools:    step.Tools,
+			Model:     link.model,
+			Messages:  messages,
+			Tools:     step.Tools,
+			MaxTokens: step.MaxTokens,
 		})
 
 		if err != nil {
@@ -475,7 +476,7 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 		}
 		streamReady := make(chan streamResult, 1)
 		go func() {
-			stream, streamErr := provider.ChatStream(attemptCtx, llm.ChatRequest{Model: link.model, Messages: messages})
+			stream, streamErr := provider.ChatStream(attemptCtx, llm.ChatRequest{Model: link.model, Messages: messages, MaxTokens: step.MaxTokens})
 			streamReady <- streamResult{stream: stream, err: streamErr}
 		}()
 		inactivity := time.NewTimer(timeout)
@@ -547,7 +548,7 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 		}
 		if content.Len() == 0 {
 			fallbackCtx, fallbackCancel := context.WithTimeout(ctx, timeout)
-			response, fallbackErr := e.executeChat(fallbackCtx, link.providerID, provider, llm.ChatRequest{Model: link.model, Messages: messages})
+			response, fallbackErr := e.executeChat(fallbackCtx, link.providerID, provider, llm.ChatRequest{Model: link.model, Messages: messages, MaxTokens: step.MaxTokens})
 			fallbackCancel()
 			if fallbackErr != nil {
 				attempts = append(attempts, Attempt{Provider: link.providerID, Model: link.model, Err: fallbackErr})

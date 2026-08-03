@@ -3,7 +3,37 @@ import {compatTranslations} from './i18n-compat'
 
 export type Locale='en'|'es'
 const STORAGE_KEY='oberth.locale'
+const codeIndexEn={
+  'codeIndex.title':'Code index','codeIndex.description':'Private hybrid retrieval by paths, symbols, text, and semantic similarity.','codeIndex.current':'current','codeIndex.stale':'stale','codeIndex.missing':'not indexed',
+  'codeIndex.counts':'{files} files · {chunks} chunks','codeIndex.unavailable':'No index status is available yet.','codeIndex.lastIndexed':'Last indexed: {date}','codeIndex.indexing':'Indexing…','codeIndex.reindex':'Reindex','codeIndex.indexNow':'Index now','codeIndex.empty':'No projects configured','codeIndex.emptyDetail':'Add a project to build its code index.','codeIndex.updated':'{project}: index updated.','codeIndex.indexingProject':'Indexing {project}…',
+  'vault.folders':'Folders','vault.folder.projects':'projects','vault.folder.architecture':'architecture','vault.folder.decisions':'decisions','vault.folder.patterns':'patterns','vault.folder.bugs':'bugs','vault.folder.sessions':'sessions','vault.folder.tasks':'tasks',
+  'codeIndex.showMore':'Show more ({count})','codeIndex.showLess':'Show less','codeIndex.showing':'Showing {visible} of {total} projects','codeIndex.listLabel':'Project code indexes',
+} as const
+const codeIndexEs:{[K in keyof typeof codeIndexEn]:string}={
+  'codeIndex.title':'\u00cdndice de c\u00f3digo','codeIndex.description':'Recuperaci\u00f3n h\u00edbrida privada por rutas, s\u00edmbolos, texto y similitud sem\u00e1ntica.','codeIndex.current':'actualizado','codeIndex.stale':'desactualizado','codeIndex.missing':'sin indexar',
+  'codeIndex.counts':'{files} archivos · {chunks} fragmentos','codeIndex.unavailable':'Todav\u00eda no hay estado disponible.','codeIndex.lastIndexed':'\u00daltima indexaci\u00f3n: {date}','codeIndex.indexing':'Indexando…','codeIndex.reindex':'Reindexar','codeIndex.indexNow':'Indexar ahora','codeIndex.empty':'No hay proyectos configurados','codeIndex.emptyDetail':'Agreg\u00e1 un proyecto para construir su \u00edndice de c\u00f3digo.','codeIndex.updated':'{project}: \u00edndice actualizado.','codeIndex.indexingProject':'Indexando {project}…',
+  'vault.folders':'Carpetas','vault.folder.projects':'proyectos','vault.folder.architecture':'arquitectura','vault.folder.decisions':'decisiones','vault.folder.patterns':'patrones','vault.folder.bugs':'errores','vault.folder.sessions':'sesiones','vault.folder.tasks':'tareas',
+  'codeIndex.showMore':'Mostrar más ({count})','codeIndex.showLess':'Mostrar menos','codeIndex.showing':'Mostrando {visible} de {total} proyectos','codeIndex.listLabel':'Índices de código por proyecto',
+}
+const sessionEn={
+  'dashboard.showMore':'Show more ({count})',
+  'session.run':'Run{project}',
+  'session.checkResult':'Check the result below or prepare a new request.','session.newRequest':'New request','session.processing':'Processing…','session.retryNoChanges':'Retry without changes{project}','session.configureRetry':'Configure retry','session.newChange':'New change{project}','session.waitingReview':'Waiting for review','session.running':'Running','session.cancelRun':'Cancel run','session.closeTask':'Close task','session.noDescription':'No additional description.','session.lastAttempt':'Last attempt configuration',
+  'session.repoUnavailable':'Repository unavailable','session.pathUnavailable':'path unavailable','session.basePending':'pending','session.worktreePending':'pending','session.readOnly':'Read-only query · The repository was not modified.','session.appliedCheckout':'Changes applied to the main checkout.','session.isolated':'Isolated environment · The main checkout does not change until you accept.','session.appliedRepository':'Changes applied to the repository. Write a new intent above and use “Request new change” for the next iteration.',
+  'session.agentChanges':'Agent changes','session.filesReady':'{count} file(s) ready to review','session.viewDiff':'See full diff ↓','session.openWorktree':'Open worktree folder','session.openIn':'Open in {ide}','session.opening':'Opening {ide}…','session.noIDE':'No compatible IDE was detected; open the folder with your preferred editor.',
+  'conversation.title':'Conversation','conversation.you':'You','session.technicalDetails':'Technical details','session.plan':'Plan','session.activity':'Activity','session.timeline':'Timeline','session.current':'Session in progress','session.result':'Result',
+} as const
+const sessionEs:{[K in keyof typeof sessionEn]:string}={
+  'dashboard.showMore':'Mostrar más ({count})',
+  'session.run':'Ejecutar{project}',
+  'session.checkResult':'Revisá el resultado abajo o prepará una nueva solicitud.','session.newRequest':'Nueva solicitud','session.processing':'Procesando…','session.retryNoChanges':'Reintentar sin cambios{project}','session.configureRetry':'Configurar reintento','session.newChange':'Nuevo cambio{project}','session.waitingReview':'Esperando revisión','session.running':'En ejecución','session.cancelRun':'Cancelar ejecución','session.closeTask':'Cerrar tarea','session.noDescription':'Sin descripción adicional.','session.lastAttempt':'Configuración del último intento',
+  'session.repoUnavailable':'Repositorio no disponible','session.pathUnavailable':'ruta no disponible','session.basePending':'pendiente','session.worktreePending':'pendiente','session.readOnly':'Consulta de sólo lectura · No se modificó el repositorio.','session.appliedCheckout':'Cambios aplicados al checkout principal.','session.isolated':'Entorno aislado · El checkout principal no cambia hasta que aceptes.','session.appliedRepository':'Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración.',
+  'session.agentChanges':'Cambios del agente','session.filesReady':'{count} archivo(s) listos para revisar','session.viewDiff':'Ver diff completo ↓','session.openWorktree':'Abrir carpeta del worktree','session.openIn':'Abrir en {ide}','session.opening':'Abriendo {ide}…','session.noIDE':'No se detectó un IDE compatible; abrí la carpeta con tu editor preferido.',
+  'conversation.title':'Conversación','conversation.you':'Vos','session.technicalDetails':'Detalles técnicos','session.plan':'Plan','session.activity':'Actividad','session.timeline':'Línea de tiempo','session.current':'Sesión en curso','session.result':'Resultado',
+}
 const en={
+  ...codeIndexEn,
+  ...sessionEn,
   'nav.dashboard':'Dashboard','nav.session':'Session','nav.vault':'Vault','nav.routes':'Routes','nav.costs':'Costs','nav.settings':'Settings','nav.main':'Main navigation',
   'dashboard.title':'Home','dashboard.subtitle':'Resume work that needs a decision.','dashboard.newTask':'New task',
   'dashboard.serviceUnavailable':'The local service is unavailable.','dashboard.stale':'The information may be out of date.',
@@ -37,6 +67,8 @@ const en={
 } as const
 type Messages={ [K in keyof typeof en]:string }
 const es:Messages={
+  ...codeIndexEs,
+  ...sessionEs,
   'nav.dashboard':'Inicio','nav.session':'Sesión','nav.vault':'Memoria','nav.routes':'Rutas','nav.costs':'Costos','nav.settings':'Configuración','nav.main':'Navegación principal',
   'dashboard.title':'Inicio','dashboard.subtitle':'Retomá el trabajo que necesita una decisión.','dashboard.newTask':'Nueva tarea',
   'dashboard.serviceUnavailable':'El servicio local no está disponible.','dashboard.stale':'La información puede estar desactualizada.',
@@ -81,6 +113,7 @@ for(const row of compatTranslations){
   }
 }
 const reviewedCompatOverrides=[
+  {source:'No se pudo completar la acción: timeout',en:'The action could not be completed: timeout',es:'No se pudo completar la acción: timeout'},
   {source:'Ingresar ruta manualmente',en:'Enter path manually',es:'Ingresar ruta manualmente'},
   {source:'Modelo para esta solicitud',en:'Model for this request',es:'Modelo para esta solicitud'},
   {source:'Proveedor',en:'Provider',es:'Proveedor'},
@@ -98,10 +131,6 @@ const reviewedCompatOverrides=[
   {source:'auth required',en:'authentication required',es:'autenticación requerida'},
 ] as const
 for(const row of reviewedCompatOverrides)for(const alias of [row.source,row.en,row.es]){compatLookup.en.set(alias,row.en);compatLookup.es.set(alias,row.es)}
-const compatReplacements:Record<Locale,[string,string][]>={
-  en:[...compatLookup.en.entries()].filter(([source])=>source.length>=4).sort((a,b)=>b[0].length-a[0].length),
-  es:[...compatLookup.es.entries()].filter(([source])=>source.length>=4).sort((a,b)=>b[0].length-a[0].length),
-}
 export type MessageKey=keyof Messages
 export function savedLocale():Locale{return localStorage.getItem(STORAGE_KEY)==='es'?'es':'en'}
 export function translate(locale:Locale,key:MessageKey,values:Record<string,string|number>={}){
@@ -128,11 +157,11 @@ function CompatLocalization({children,locale}:{children:ReactNode;locale:Locale}
       if(catalogValues[locale].has(trimmed))return value
       if(protectedTerms.has(trimmed))return value
       if(translated!==undefined)return value.replace(trimmed,translated)
-      let next=value
-      for(const [source,target] of compatReplacements[locale])if(source!==target&&next.includes(source))next=next.replaceAll(source,target)
-      return next
+      return value
     }
     const localize=(root:Node)=>{
+      const element=root.nodeType===Node.TEXT_NODE?root.parentElement:root instanceof Element?root:null
+      if(element?.closest('[data-no-translate]'))return
       if(root.nodeType===Node.TEXT_NODE){
         const current=root.nodeValue||'',next=translateValue(current)
         if(next!==current)root.nodeValue=next

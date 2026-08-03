@@ -8,10 +8,31 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - Multi-project Code Workspace with CodeMirror tabs and directory navigation.
 - Real-time session and Vault updates over WebSocket.
+- Progressive disclosure for project code-index status: four projects are
+  shown initially and additional projects load in small batches.
+- Blocked and failed tasks can be closed without losing their recorded history.
 
 ### Fixed
 
 - Project opening no longer leaves the explorer stuck loading.
+- Locale switching now translates application chrome without modifying user or
+  model messages, repository paths, identifiers, code, or technical payloads.
+- Clean GitHub Actions checkouts no longer require generated desktop assets for
+  the cross-platform Go test job.
+
+## 0.1.0-alpha.2
+
+### Added
+
+- Private, incremental repository code index with symbol-aware chunking.
+- Hybrid path, symbol, lexical and semantic retrieval for task context.
+- Repository-scoped vector persistence, explainable ranking and lexical fallback.
+- Secret, binary, generated-file and repository exclusion policies for indexing.
+
+### Changed
+
+- Repository context compilation now incorporates complete ranked code chunks
+  under the existing token and source-diversity budgets.
 
 ## 0.1.0-alpha.1
 

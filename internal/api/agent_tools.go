@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/saterdoe/oberth/internal/agentruntime"
@@ -28,6 +31,32 @@ func agentToolDefinitions() []llm.ToolDefinition {
 	}
 }
 
+func readOnlyAgentToolDefinitions() []llm.ToolDefinition {
+	all := agentToolDefinitions()
+	tools := make([]llm.ToolDefinition, 0, 3)
+	for _, tool := range all {
+		if tool.Name == "read" || tool.Name == "search" || tool.Name == "finish" {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
+// localImplementationToolDefinitions keeps the native tool contract small for
+// local models. Reasoning records are derived from concrete tool observations
+// after the run; asking a small model to author that bookkeeping competes with
+// the actual edit and has historically caused repeated-action loops.
+func localImplementationToolDefinitions() []llm.ToolDefinition {
+	all := agentToolDefinitions()
+	tools := make([]llm.ToolDefinition, 0, 5)
+	for _, tool := range all {
+		if tool.Name == "read" || tool.Name == "search" || tool.Name == "patch" || tool.Name == "command" || tool.Name == "finish" {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
 type approvalResolver func(context.Context, permission.Request) (permission.Decision, bool)
 
 func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, runID, taskID, sessionID, taskType, taskRisk string, policy *permission.Engine, approvals approvalResolver, action agentruntime.Action) agentruntime.Observation {
@@ -47,6 +76,10 @@ func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, run
 		}
 		content, err := workspace.Read(ctx, args.Path)
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				observation.Data = map[string]any{"path": args.Path, "exists": false}
+				break
+			}
 			return fail(err)
 		}
 		observation.Data = map[string]any{"path": args.Path, "content": string(content)}
@@ -139,6 +172,10 @@ func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, run
 		if decision != permission.Allow {
 			return fail(fmt.Errorf("command requires approval"))
 		}
+		// Runtime commands pass through a second policy check inside the
+		// workspace runner. Mirror the already-validated exact allowlist target
+		// there so verification cannot fall into a redundant approval loop.
+		policy.AddRule(permission.Rule{Name: "built-in verification: " + target, Priority: 100000, Operation: "command.exec", TargetPattern: target, Decision: permission.Allow})
 		result, err := workspace.Run(ctx, workspacepkg.Command{Program: args.Program, Args: args.Args})
 		policyName := "built-in verification allowlist"
 		if rule != nil {
@@ -164,6 +201,19 @@ func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, run
 func normalizeLegacyReasoningArguments(raw json.RawMessage) json.RawMessage {
 	var value map[string]any
 	if json.Unmarshal(raw, &value) != nil {
+		return raw
+	}
+	if evidence, ok := value["evidence"].(map[string]any); ok {
+		if hash, exists := evidence["hash"].(string); exists && !regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(hash) {
+			// Small local models often emit placeholders such as "some_hash".
+			// Hashes are optional, so preserve the evidence and omit the invented
+			// integrity claim instead of failing the entire run.
+			delete(evidence, "hash")
+		}
+		normalized, err := json.Marshal(map[string]any{"evidence": evidence})
+		if err == nil {
+			return normalized
+		}
 		return raw
 	}
 	record, _ := value["record"].(map[string]any)
@@ -208,6 +258,13 @@ func normalizeLegacyReasoningArguments(raw json.RawMessage) json.RawMessage {
 }
 
 func safeAgentCommand(program string, args []string) bool {
+	// filepath.Base follows the current OS separator rules. Normalize Windows
+	// paths as well so a persisted/local-model command remains portable when it
+	// is validated by Linux CI or another Oberth host.
+	base := strings.ToLower(filepath.Base(strings.ReplaceAll(strings.TrimSpace(program), `\`, "/")))
+	if (base == "clang" || base == "clang.exe") && slices.Equal(args, []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "main.c"}) {
+		return true
+	}
 	if strings.EqualFold(strings.TrimSpace(program), "npm") &&
 		len(args) == 2 &&
 		strings.EqualFold(strings.TrimSpace(args[0]), "run") &&

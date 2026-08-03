@@ -13,6 +13,7 @@ type Step struct {
 	ID         string               `json:"id"`
 	ProviderID string               `json:"provider_id"`
 	Model      string               `json:"model"`
+	MaxTokens  int                  `json:"max_tokens,omitempty"`
 	DependsOn  []string             `json:"depends_on,omitempty"`
 	Fallbacks  []Step               `json:"fallbacks,omitempty"`
 	Reviewer   *StepReviewer        `json:"reviewer,omitempty"`

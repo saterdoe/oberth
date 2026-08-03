@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -163,14 +164,12 @@ func TestOpenFailure(t *testing.T) {
 }
 
 func TestSetPlatformAttributes(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows process attributes")
+	}
 	cmd := exec.Command("cmd.exe", "/c", "echo test")
 	setPlatformAttributes(cmd)
 	if cmd.SysProcAttr == nil {
 		t.Fatal("expected SysProcAttr to be configured")
 	}
 }
-
-
-
-
-

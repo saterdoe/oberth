@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/saterdoe/oberth/internal/buildinfo"
 	"github.com/spf13/viper"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	Database          DatabaseConfig          `mapstructure:"database"`
 	Agent             AgentConfig             `mapstructure:"agent"`
 	Context           ContextConfig           `mapstructure:"context"`
+	CodeIndex         CodeIndexConfig         `mapstructure:"code_index"`
 	Vault             VaultConfig             `mapstructure:"vault"`
 	VectorDB          VectorDBConfig          `mapstructure:"vector_store"`
 	LLM               LLMConfig               `mapstructure:"llm"`
@@ -49,6 +51,18 @@ type ContextConfig struct {
 	ReserveOutputTokens int    `mapstructure:"reserve_output_tokens"`
 	MaxSourcesPerKind   int    `mapstructure:"max_sources_per_kind"`
 }
+
+type CodeIndexConfig struct {
+	Enabled       *bool    `mapstructure:"enabled"`
+	MaxFileBytes  int64    `mapstructure:"max_file_bytes"`
+	MaxFiles      int      `mapstructure:"max_files"`
+	MaxChunks     int      `mapstructure:"max_chunks"`
+	MaxChunkLines int      `mapstructure:"max_chunk_lines"`
+	OverlapLines  int      `mapstructure:"overlap_lines"`
+	Exclude       []string `mapstructure:"exclude"`
+}
+
+func (c CodeIndexConfig) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
 
 type VaultConfig struct {
 	Path                  string `mapstructure:"path"`
@@ -192,14 +206,14 @@ func Default() *Config {
 	}
 	attemptTimeout := strings.TrimSpace(os.Getenv("OBERTH_LLM_ATTEMPT_TIMEOUT"))
 	if attemptTimeout == "" {
-		attemptTimeout = "5m"
+		attemptTimeout = "10m"
 	}
 	return &Config{
 		Server: ServerConfig{
 			Host:     "127.0.0.1",
 			Port:     9090,
 			LogLevel: "info",
-			Version:  "0.1.0-alpha.1",
+			Version:  buildinfo.Version,
 		},
 		Database: DatabaseConfig{
 			Driver:   "embedded",
@@ -215,6 +229,7 @@ func Default() *Config {
 			ReserveOutputTokens: 2000,
 			MaxSourcesPerKind:   6,
 		},
+		CodeIndex: CodeIndexConfig{Enabled: boolPtr(true), MaxFileBytes: 512 * 1024, MaxFiles: 5000, MaxChunks: 20000, MaxChunkLines: 240, OverlapLines: 20},
 		Vault: VaultConfig{
 			Path:                  vaultPath,
 			AutoIndex:             true,
@@ -293,3 +308,5 @@ func Default() *Config {
 		},
 	}
 }
+
+func boolPtr(value bool) *bool { return &value }

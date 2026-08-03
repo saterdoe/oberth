@@ -41,6 +41,16 @@ func TestSafeAgentCommandAllowsReadOnlyGitDiffCheck(t *testing.T) {
 	}
 }
 
+func TestSafeAgentCommandAllowsStrictClangSyntaxCheck(t *testing.T) {
+	args := []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "main.c"}
+	if !safeAgentCommand(`C:\Program Files\LLVM\bin\clang.exe`, args) {
+		t.Fatal("expected strict clang syntax verification to be allowed")
+	}
+	if safeAgentCommand("clang", []string{"main.c", "-o", "app.exe"}) {
+		t.Fatal("expected arbitrary clang output command to remain blocked")
+	}
+}
+
 func TestRecordReasoningToolValidatesWithoutWorkspaceEffects(t *testing.T) {
 	action := agentruntime.Action{
 		SchemaVersion: agentruntime.SchemaVersion,
@@ -96,6 +106,18 @@ func TestRecordReasoningToolNormalizesFlatNativeArguments(t *testing.T) {
 	if !strings.Contains(string(encoded), `"id":"unknown-file"`) ||
 		!strings.Contains(string(encoded), `"statement":"The requested file was not found."`) {
 		t.Fatalf("unexpected normalized reasoning observation: %s", encoded)
+	}
+}
+
+func TestRecordReasoningToolDropsPlaceholderEvidenceHash(t *testing.T) {
+	action := agentruntime.Action{SchemaVersion: agentruntime.SchemaVersion, Tool: "record_reasoning", Arguments: json.RawMessage(`{"evidence":{"id":"ev-1","source":"README.md","hash":"some_hash","detail":"observed"}}`)}
+	observation := executeTypedTool(context.Background(), nil, "", "", "", "", "", permission.New(), nil, action)
+	if observation.Status != "ok" {
+		t.Fatalf("expected placeholder hash to be omitted: %+v", observation)
+	}
+	encoded, _ := json.Marshal(observation.Data)
+	if strings.Contains(string(encoded), "some_hash") {
+		t.Fatalf("placeholder hash survived normalization: %s", encoded)
 	}
 }
 

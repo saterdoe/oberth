@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Oberth 0.1.0-alpha.1 is a local, single-user Public Alpha. Security fixes are
+Oberth 0.1.0-alpha.2 is a local, single-user Public Alpha. Security fixes are
 applied to the latest alpha release only. Older alpha releases are unsupported.
 
 ## Reporting a vulnerability

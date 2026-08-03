@@ -14,7 +14,7 @@ func TestVersionCmd_Output(t *testing.T) {
 }
 
 func TestVersionCmd_DefaultValues(t *testing.T) {
-	assert.Equal(t, "0.1.0-alpha.1", Version)
+	assert.Equal(t, "0.1.0-alpha.2", Version)
 	assert.Equal(t, "unknown", Commit)
 	assert.Equal(t, "unknown", BuildDate)
 }

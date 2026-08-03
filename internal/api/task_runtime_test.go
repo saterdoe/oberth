@@ -9,7 +9,7 @@ func TestTaskTransitions(t *testing.T) {
 	}{
 		{"pending", "running", true}, {"running", "review", true},
 		{"review", "completed", true}, {"failed", "running", true},
-		{"completed", "running", false}, {"pending", "completed", false},
+		{"completed", "running", true}, {"pending", "completed", false},
 	}
 	for _, tt := range tests {
 		if got := taskTransitions[tt.from][tt.to]; got != tt.allowed {

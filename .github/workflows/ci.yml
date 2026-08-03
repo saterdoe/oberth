@@ -21,7 +21,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test ./...
+      # The desktop package embeds generated UI assets, which are built by the
+      # Web contracts job. Test the source packages here without requiring a
+      # generated frontend/dist directory in a clean checkout.
+      - run: go test ./cmd/... ./internal/... ./pkg/...
       - run: go build ./cmd/oberth ./cmd/oberth-server
 
   race:

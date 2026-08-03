@@ -248,3 +248,27 @@ func TestRunPersistsObservationEnrichmentFromOnTurn(t *testing.T) {
 		t.Fatalf("observation enrichment was lost: %+v", result.Observations)
 	}
 }
+
+func TestRunBreaksRepeatedActionLoopAndAllowsFinish(t *testing.T) {
+	responses := []string{
+		`{"schema_version":"1","tool":"record_reasoning","arguments":{"record":{"id":"u1","kind":"unknown","statement":"missing","status":"unresolved"}}}`,
+		`{"schema_version":"1","tool":"record_reasoning","arguments":{"record":{"id":"u1","kind":"unknown","statement":"missing","status":"unresolved"}}}`,
+		`{"schema_version":"1","tool":"finish","arguments":{"summary":"answered from available context"},"summary":"answered from available context"}`,
+	}
+	index := 0
+	executions := 0
+	result, err := Run(context.Background(), "system", "question", Config{MaxTurns: 4, Model: func(_ context.Context, messages []Message) (ModelResponse, error) {
+		if index == 2 && !strings.Contains(messages[len(messages)-1].Content, "Loop correction") {
+			t.Fatal("missing loop correction")
+		}
+		r := ModelResponse{Content: responses[index]}
+		index++
+		return r, nil
+	}, Execute: func(context.Context, Action) Observation { executions++; return Observation{Status: "ok"} }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Summary != "answered from available context" || executions != 1 {
+		t.Fatalf("unexpected loop recovery: %+v executions=%d", result, executions)
+	}
+}

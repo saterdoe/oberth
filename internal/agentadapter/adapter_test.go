@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,9 @@ func TestContractsAreVersioned(t *testing.T) {
 }
 
 func TestResolveExecutableFromUserLocalBin(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows executable lookup fixture")
+	}
 	home := t.TempDir()
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("HOME", home)
@@ -65,6 +69,9 @@ func TestExecuteValidations(t *testing.T) {
 }
 
 func TestCapabilitiesAndExecuteWithMockCLI(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows batch CLI fixture")
+	}
 	tempDir := t.TempDir()
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -122,6 +129,9 @@ exit /b 0
 }
 
 func TestCapabilitiesClaudeAuthLoggedOut(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows batch CLI fixture")
+	}
 	tempDir := t.TempDir()
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -149,6 +159,9 @@ exit /b 0
 }
 
 func TestCapabilitiesVersionProbeFailed(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows batch CLI fixture")
+	}
 	tempDir := t.TempDir()
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -169,5 +182,3 @@ exit /b 1
 		t.Fatalf("expected version probe error: %+v, %v", caps, err)
 	}
 }
-
-

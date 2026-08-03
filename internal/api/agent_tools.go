@@ -258,7 +258,10 @@ func normalizeLegacyReasoningArguments(raw json.RawMessage) json.RawMessage {
 }
 
 func safeAgentCommand(program string, args []string) bool {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(program)))
+	// filepath.Base follows the current OS separator rules. Normalize Windows
+	// paths as well so a persisted/local-model command remains portable when it
+	// is validated by Linux CI or another Oberth host.
+	base := strings.ToLower(filepath.Base(strings.ReplaceAll(strings.TrimSpace(program), `\`, "/")))
 	if (base == "clang" || base == "clang.exe") && slices.Equal(args, []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "main.c"}) {
 		return true
 	}

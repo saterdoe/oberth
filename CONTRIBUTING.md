@@ -33,6 +33,27 @@ output must update the corresponding contract and tests. Do not commit runtime
 state, credentials, local tokens, databases, worktrees, build output or
 dependency directories.
 
+### Release versioning
+
+`VERSION` is the canonical Oberth release version. Runtime, package and Windows
+resource versions must agree with it. Validate the complete contract with:
+
+```text
+npm run version:check
+```
+
+To prepare a version change, first add the corresponding release section to
+`CHANGELOG.md`, then run:
+
+```text
+npm run version:set -- <semver>
+```
+
+The update command synchronizes the root and UI package metadata, lockfiles,
+the VS Code extension, Go runtime default, Windows resources and public version
+references. CI rejects version drift, missing changelog sections and release
+tags that do not equal `v` followed by the canonical version.
+
 ## Code and documentation
 
 - Keep changes focused and preserve unrelated work.

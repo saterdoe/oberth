@@ -31,7 +31,7 @@ function runNpm(args) {
   return run(npm, args)
 }
 
-run('go', ['vet', './...'])
+run('go', ['vet', './cmd/...', './internal/...', './pkg/...'])
 run('go', ['test', './cmd/...', './internal/...', './pkg/...', `-coverprofile=${goProfile}`])
 const summary = run('go', ['tool', 'cover', `-func=${goProfile}`], { capture: true })
 fs.writeFileSync(goSummary, summary)

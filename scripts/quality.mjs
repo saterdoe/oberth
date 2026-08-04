@@ -31,8 +31,15 @@ function runNpm(args) {
   return run(npm, args)
 }
 
-run('go', ['vet', './cmd/...', './internal/...', './pkg/...'])
-run('go', ['test', './cmd/...', './internal/...', './pkg/...', `-coverprofile=${goProfile}`])
+const packageOutput = run('go', ['list', './cmd/...', './internal/...', './pkg/...'], { capture: true })
+const goPackages = packageOutput
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .filter(packageName => !packageName.includes('/internal/generated/'))
+if (goPackages.length === 0) throw new Error('Go package discovery returned no maintained packages')
+
+run('go', ['vet', ...goPackages])
+run('go', ['test', ...goPackages, `-coverprofile=${goProfile}`])
 const summary = run('go', ['tool', 'cover', `-func=${goProfile}`], { capture: true })
 fs.writeFileSync(goSummary, summary)
 

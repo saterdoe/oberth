@@ -1,0 +1,33 @@
+# Quality gates
+
+Oberth uses measured quality baselines to prevent regressions while the Public
+Alpha test suite expands. Run the same checks used by CI from the repository
+root:
+
+```text
+npm run quality
+```
+
+The command runs `go vet`, Go tests with aggregate statement coverage,
+TypeScript type checking and UI tests with statement, branch, function and line
+coverage.
+
+## Initial baselines
+
+The baselines were measured on `main` when the gates were introduced. Thresholds
+are intentionally just below the observed values so ordinary runtime variance
+does not block a change while a material regression does.
+
+| Surface | Metric | Observed | Minimum |
+| --- | --- | ---: | ---: |
+| Go | statements | 46.6% | 45% |
+| UI | statements | 67.36% | 65% |
+| UI | branches | 47.34% | 45% |
+| UI | functions | 59.63% | 55% |
+| UI | lines | 88.26% | 85% |
+
+Generated reports are written to `artifacts/coverage/` and retained by CI. Go
+coverage includes `cmd`, `internal` and reusable `pkg` packages. Standalone
+generated and packaging surfaces are not used to pad the denominator.
+Exclusions or threshold reductions require an explanation in the pull request;
+improvements should raise the corresponding baseline.

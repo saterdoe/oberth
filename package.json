@@ -14,6 +14,8 @@
     "build:all": "npm run build",
     "test": "npm --prefix ui run test",
     "test:docs": "node scripts/docs_contract.test.mjs",
+    "test:release-contract": "node scripts/release_check_contract.test.mjs",
+    "check:release": "node scripts/release-check.mjs",
     "typecheck": "npm --prefix ui run typecheck"
   },
   "devDependencies": {

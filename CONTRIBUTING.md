@@ -28,6 +28,10 @@ Linux or macOS:
 ./scripts/check-release.sh
 ```
 
+Release operators must follow the [release and rollback runbook](docs/RELEASE_RUNBOOK.md).
+It defines the dry run, release-branch flow, go/no-go evidence, immutable tag,
+artifact verification, advancement to `main`, and recovery procedure.
+
 Changes to runtime states, events, result bundles, tools or structured CLI
 output must update the corresponding contract and tests. Do not commit runtime
 state, credentials, local tokens, databases, worktrees, build output or

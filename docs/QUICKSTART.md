@@ -10,6 +10,8 @@ clean backup, and review every generated change before approval.
 - Node.js 22 or newer when building the interface
 
 Windows is the primary desktop platform for this release.
+The complete CLI, service, desktop, architecture, WSL, and shell support policy
+is published in the [supported platform matrix](SUPPORT_MATRIX.md).
 
 ## Start on Windows
 

@@ -11,6 +11,8 @@ while public interfaces are still taking shape.
 - Node.js 22 or newer for the interface
 
 Follow the [Quickstart](docs/QUICKSTART.md) to set up the CLI and local service.
+The measured coverage and static-analysis checks are documented in
+[Quality gates](docs/QUALITY_GATES.md).
 
 ## Before submitting a change
 

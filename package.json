@@ -16,7 +16,8 @@
     "test:docs": "node scripts/docs_contract.test.mjs",
     "typecheck": "npm --prefix ui run typecheck",
     "version:check": "node scripts/version.mjs",
-    "version:set": "node scripts/version.mjs --set"
+    "version:set": "node scripts/version.mjs --set",
+    "quality": "node scripts/quality.mjs"
   },
   "devDependencies": {
     "@boundaryml/baml": "^0.222.0",

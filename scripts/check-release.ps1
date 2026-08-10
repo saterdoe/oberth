@@ -1,15 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-Push-Location $root
-try {
-    & (Join-Path $PSScriptRoot "audit-release-tree.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "Release tree audit failed." }
-    & (Join-Path $PSScriptRoot "check.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "Main verification failed." }
-    & (Join-Path $PSScriptRoot "check-e2e.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "Durable E2E failed." }
-    Write-Host "Release candidate verification passed." -ForegroundColor Green
-} finally {
-    Pop-Location
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source
+if (-not $node) {
+    throw "Node.js 22 or newer is required and was not found in PATH."
+}
+
+& $node (Join-Path $PSScriptRoot "release-check.mjs")
+if ($LASTEXITCODE -ne 0) {
+    throw "Release candidate verification failed."
 }

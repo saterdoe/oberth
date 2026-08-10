@@ -17,7 +17,9 @@
     "typecheck": "npm --prefix ui run typecheck",
     "version:check": "node scripts/version.mjs",
     "version:set": "node scripts/version.mjs --set",
-    "quality": "node scripts/quality.mjs"
+    "quality": "node scripts/quality.mjs",
+    "test:release-contract": "node scripts/release_check_contract.test.mjs",
+    "check:release": "node scripts/release-check.mjs"
   },
   "devDependencies": {
     "@boundaryml/baml": "^0.222.0",

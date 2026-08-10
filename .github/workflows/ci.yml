@@ -49,3 +49,30 @@ jobs:
           name: coverage-reports
           path: artifacts/coverage
           if-no-files-found: warn
+
+  architecture-smoke:
+    name: Smoke (${{ matrix.goos }}/${{ matrix.goarch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, goos: linux, goarch: amd64, suffix: ""}
+          - {os: ubuntu-24.04-arm, goos: linux, goarch: arm64, suffix: ""}
+          - {os: macos-15-intel, goos: darwin, goarch: amd64, suffix: ""}
+          - {os: macos-14, goos: darwin, goarch: arm64, suffix: ""}
+          - {os: windows-2022, goos: windows, goarch: amd64, suffix: ".exe"}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build supported target
+        shell: bash
+        run: ./scripts/build-release.sh "${{ matrix.goos }}" "${{ matrix.goarch }}" smoke
+      - name: Execute native smoke tests
+        shell: bash
+        run: |
+          ./smoke/oberth-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} version
+          ./smoke/oberth-server-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} -h

@@ -140,6 +140,9 @@ The local service binds to loopback and uses a generated token. Do not expose
 its port to a network. See [Security](SECURITY.md) for trust boundaries and
 private vulnerability reporting.
 
+See the [supported platform matrix](docs/SUPPORT_MATRIX.md) for the exact OS,
+CPU architecture, shell, WSL, and desktop support boundaries.
+
 ## Development
 
 Run the release checks before submitting a change:

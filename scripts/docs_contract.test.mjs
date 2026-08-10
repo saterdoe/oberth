@@ -25,6 +25,16 @@ const required = {
     'Trust boundaries',
     'Compatibility',
   ],
+  'docs/SUPPORT_MATRIX.md': [
+    'Windows 11 / Server 2022+',
+    'Ubuntu 22.04+',
+    'macOS 14+',
+    'amd64',
+    'arm64',
+    'Tooling compatibility',
+    'WSL',
+    'Support policy',
+  ],
   'CONTRIBUTING.md': [
     'Development requirements',
     'Pull requests',
@@ -54,5 +64,16 @@ const uiVersion = JSON.parse(read('ui/package.json')).version
 assert.equal(packageVersion, version)
 assert.equal(uiVersion, packageVersion)
 assert.ok(read('README.md').includes('LICENSE'), 'README must link the license')
+assert.ok(read('README.md').includes('docs/SUPPORT_MATRIX.md'), 'README must link the support matrix')
+assert.ok(read('docs/QUICKSTART.md').includes('SUPPORT_MATRIX.md'), 'Quickstart must link the support matrix')
+
+const ci = read('.github/workflows/ci.yml')
+const release = read('.github/workflows/release.yml')
+for (const target of ['linux/amd64', 'linux/arm64', 'darwin/amd64', 'darwin/arm64', 'windows/amd64']) {
+  const [goos, goarch] = target.split('/')
+  assert.ok(ci.includes(`goos: ${goos}`) && ci.includes(`goarch: ${goarch}`), `CI must include ${target}`)
+  assert.ok(release.includes(`goos: ${goos}`) && release.includes(`goarch: ${goarch}`), `release must include ${target}`)
+}
+assert.ok(release.includes('oberth-${{ matrix.goos }}-${{ matrix.goarch }}'), 'release assets must include OS and architecture')
 
 console.log('Documentation contract passed.')

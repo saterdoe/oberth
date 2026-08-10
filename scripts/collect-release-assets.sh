@@ -58,9 +58,20 @@ if [ "$artifact_count" -eq 0 ]; then
   exit 1
 fi
 
+vsix_count=0
+for vsix in "$SOURCE_ROOT"/vscode-extension/*.vsix; do
+  [ -f "$vsix" ] || continue
+  cp "$vsix" "$OUTPUT_DIR/${vsix##*/}"
+  vsix_count=$((vsix_count + 1))
+done
+if [ "$vsix_count" -ne 1 ]; then
+  echo "Expected exactly one VS Code extension artifact; found $vsix_count." >&2
+  exit 1
+fi
+
 (
   cd "$OUTPUT_DIR"
   sha256sum oberth-* > SHA256SUMS
 )
 
-echo "Prepared $artifact_count platform artifact sets in $OUTPUT_DIR."
+echo "Prepared $artifact_count platform artifact sets and one VSIX in $OUTPUT_DIR."

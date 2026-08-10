@@ -81,10 +81,37 @@ jobs:
           path: smoke-logs/*
           if-no-files-found: error
 
+  vscode-extension:
+    name: Package and smoke VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/vscode/package-lock.json
+      - run: npm --prefix extensions/vscode ci
+      - name: Build the VSIX twice and verify reproducibility
+        run: |
+          mkdir -p vsix-a vsix-b vscode-extension
+          node scripts/package-vsix.mjs vsix-a/oberth-vscode.vsix
+          node scripts/package-vsix.mjs vsix-b/oberth-vscode.vsix
+          cmp vsix-a/oberth-vscode.vsix vsix-b/oberth-vscode.vsix
+          VERSION="$(node -p "require('./package.json').version")"
+          cp vsix-a/oberth-vscode.vsix "vscode-extension/oberth-vscode-${VERSION}.vsix"
+      - name: Install and activate the packaged extension
+        run: xvfb-run -a npm --prefix extensions/vscode run test:integration -- ../../vscode-extension/*.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     if: github.ref_type == 'tag'
-    needs: smoke-artifacts
+    needs: [smoke-artifacts, vscode-extension]
     runs-on: ubuntu-latest
     permissions:
       contents: write

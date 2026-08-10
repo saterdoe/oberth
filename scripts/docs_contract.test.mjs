@@ -37,6 +37,16 @@ const required = {
     'WSL',
     'Support policy',
   ],
+  'docs/RELEASE_RUNBOOK.md': [
+    'Release invariants',
+    'Dry run',
+    'Cut the release branch',
+    'Verify the candidate',
+    'Tag and publish',
+    'Rollback before publishing',
+    'Rollback after publishing',
+    'Recovery and evidence',
+  ],
   'CONTRIBUTING.md': [
     'Development requirements',
     'Pull requests',
@@ -77,5 +87,26 @@ for (const target of ['linux/amd64', 'linux/arm64', 'darwin/amd64', 'darwin/arm6
   assert.ok(release.includes(`goos: ${goos}`) && release.includes(`goarch: ${goarch}`), `release must include ${target}`)
 }
 assert.ok(release.includes('oberth-${{ matrix.goos }}-${{ matrix.goarch }}'), 'release assets must include OS and architecture')
+assert.ok(
+  read('README.md').includes('docs/RELEASE_RUNBOOK.md'),
+  'README must link the release runbook',
+)
+assert.ok(
+  read('CONTRIBUTING.md').includes('docs/RELEASE_RUNBOOK.md'),
+  'CONTRIBUTING must link the release runbook',
+)
+
+const runbook = read('docs/RELEASE_RUNBOOK.md')
+for (const invariant of [
+  'main` is the source of truth',
+  'release/<version>',
+  'git tag -a v<version>',
+  'git merge --ff-only v<version>',
+  'Published tags are immutable',
+  'Persisted data is never downgraded',
+  'Force-pushing or resetting',
+]) {
+  assert.ok(runbook.includes(invariant), `release runbook must preserve: ${invariant}`)
+}
 
 console.log('Documentation contract passed.')

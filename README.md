@@ -189,6 +189,7 @@ persists across restarts. To contribute another locale, follow
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
+- [Release and rollback runbook](docs/RELEASE_RUNBOOK.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 There is no compatibility guarantee before beta. Breaking changes and required

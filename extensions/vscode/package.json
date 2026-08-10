@@ -4,7 +4,10 @@
   "displayName": "oberth",
   "version": "0.1.0-alpha.2",
   "license": "Apache-2.0",
-  "files": ["extension.js", "README.md"],
+  "files": ["extension.js", "cli.js", "README.md"],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "engines": {"vscode": "^1.90.0"},
   "main": "./extension.js",
   "activationEvents": ["onCommand:oberth.run", "onCommand:oberth.status", "onCommand:oberth.review", "onCommand:oberth.openControlRoom"],

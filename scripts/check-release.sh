@@ -21,6 +21,7 @@ if command -v npm >/dev/null 2>&1; then
   npm test
   npm run build:all
   npm run test:docs
+  npm run test:release-workflow
 else
   echo "npm not found: optional web checks skipped."
 fi

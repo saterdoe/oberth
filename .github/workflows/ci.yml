@@ -63,3 +63,4 @@ jobs:
       - run: npm test
       - run: npm run build:all
       - run: npm run test:docs
+      - run: npm run test:release-workflow

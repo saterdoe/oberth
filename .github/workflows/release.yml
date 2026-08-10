@@ -46,3 +46,26 @@ jobs:
         with:
           name: oberth-${{ matrix.goos }}
           path: dist/*
+
+  publish:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Prepare uniquely named release assets
+        run: sh ./scripts/collect-release-assets.sh release-artifacts publish
+      - name: Create the immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" publish/* \
+            --verify-tag \
+            --title "Oberth ${GITHUB_REF_NAME}" \
+            --generate-notes

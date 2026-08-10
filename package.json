@@ -14,7 +14,9 @@
     "build:all": "npm run build",
     "test": "npm --prefix ui run test",
     "test:docs": "node scripts/docs_contract.test.mjs",
-    "typecheck": "npm --prefix ui run typecheck"
+    "typecheck": "npm --prefix ui run typecheck",
+    "version:check": "node scripts/version.mjs",
+    "version:set": "node scripts/version.mjs --set"
   },
   "devDependencies": {
     "@boundaryml/baml": "^0.222.0",

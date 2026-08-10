@@ -29,12 +29,25 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify version contract
+        shell: bash
+        run: |
+          node scripts/version.mjs
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${VERSION}" >&2
+            exit 1
+          fi
       - name: Build
         shell: bash
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o "dist/oberth${{ matrix.suffix }}" ./cmd/oberth
-          go build -trimpath -ldflags="-s -w" -o "dist/oberth-server${{ matrix.suffix }}" ./cmd/oberth-server
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          go build -trimpath -ldflags="-s -w -X github.com/saterdoe/oberth/internal/buildinfo.Version=${VERSION}" -o "dist/oberth${{ matrix.suffix }}" ./cmd/oberth
+          go build -trimpath -ldflags="-s -w -X github.com/saterdoe/oberth/internal/buildinfo.Version=${VERSION}" -o "dist/oberth-server${{ matrix.suffix }}" ./cmd/oberth-server
           cd dist
           sha256sum * > SHA256SUMS
       - uses: anchore/sbom-action@v0

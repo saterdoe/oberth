@@ -9,6 +9,7 @@ const root = path.resolve(import.meta.dirname, '..')
 export const RELEASE_STEPS = Object.freeze([
   { name: 'Install root dependencies', command: 'npm', args: ['ci'] },
   { name: 'Install UI dependencies', command: 'npm', args: ['--prefix', 'ui', 'ci'] },
+  { name: 'Install VS Code extension dependencies', command: 'npm', args: ['--prefix', 'extensions/vscode', 'ci'] },
   { name: 'Go tests', command: 'go', args: ['test', './cmd/...', './internal/...', './pkg/...'] },
   { name: 'Go vet', command: 'go', args: ['vet', './cmd/...', './internal/...', './pkg/...'] },
   { name: 'Go builds', command: 'go', args: ['build', './cmd/oberth', './cmd/oberth-server'] },
@@ -26,6 +27,7 @@ export const RELEASE_STEPS = Object.freeze([
   { name: 'UI build', command: 'npm', args: ['run', 'build:all'] },
   { name: 'Documentation contract', command: 'npm', args: ['run', 'test:docs'] },
   { name: 'Release pipeline contract', command: 'node', args: ['scripts/release_check_contract.test.mjs'] },
+  { name: 'Publishing workflow contract', command: 'node', args: ['scripts/release_workflow_contract.test.mjs'] },
 ])
 
 function executable(command) {

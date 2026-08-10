@@ -20,7 +20,9 @@
     "version:set": "node scripts/version.mjs --set",
     "quality": "node scripts/quality.mjs",
     "test:release-contract": "node scripts/release_check_contract.test.mjs",
-    "check:release": "node scripts/release-check.mjs"
+    "check:release": "node scripts/release-check.mjs",
+    "test:release-workflow": "node scripts/release_workflow_contract.test.mjs",
+    "package:vscode": "node scripts/package-vsix.mjs"
   },
   "devDependencies": {
     "@boundaryml/baml": "^0.222.0",

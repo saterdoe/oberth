@@ -58,6 +58,7 @@ jobs:
           ./scripts/build-release.sh "${{ matrix.goos }}" "${{ matrix.goarch }}" dist
           ./dist/oberth-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} version
           ./dist/oberth-server-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} -h
+          cp LICENSE NOTICE THIRD_PARTY_NOTICES.md dist/
           cd dist
           sha256sum * > SHA256SUMS
       - uses: anchore/sbom-action@v0
@@ -69,3 +70,89 @@ jobs:
         with:
           name: oberth-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
+
+  smoke-artifacts:
+    name: Smoke packaged artifact (${{ matrix.os }})
+    needs: artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: oberth-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: package
+      - name: Verify package contents and run native smoke tests
+        run: node scripts/smoke-release-artifact.mjs package ${{ matrix.goos }} ${{ matrix.goarch }}
+      - name: Preserve smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: smoke-logs/*
+          if-no-files-found: error
+
+  vscode-extension:
+    name: Package and smoke VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/vscode/package-lock.json
+      - run: npm --prefix extensions/vscode ci
+      - name: Build the VSIX twice and verify reproducibility
+        run: |
+          mkdir -p vsix-a vsix-b vscode-extension
+          node scripts/package-vsix.mjs vsix-a/oberth-vscode.vsix
+          node scripts/package-vsix.mjs vsix-b/oberth-vscode.vsix
+          cmp vsix-a/oberth-vscode.vsix vsix-b/oberth-vscode.vsix
+          VERSION="$(node -p "require('./package.json').version")"
+          cp vsix-a/oberth-vscode.vsix "vscode-extension/oberth-vscode-${VERSION}.vsix"
+      - name: Install and activate the packaged extension
+        run: xvfb-run -a npm --prefix extensions/vscode run test:integration -- ../../vscode-extension/*.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [smoke-artifacts, vscode-extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Prepare uniquely named release assets
+        run: sh ./scripts/collect-release-assets.sh release-artifacts publish
+      - name: Create the immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" publish/* \
+            --verify-tag \
+            --title "Oberth ${GITHUB_REF_NAME}" \
+            --generate-notes

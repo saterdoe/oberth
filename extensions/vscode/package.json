@@ -2,29 +2,71 @@
   "name": "oberth",
   "publisher": "oberth",
   "displayName": "oberth",
+  "description": "Delegate coding tasks to the local Oberth runtime and review their isolated results.",
   "version": "0.1.0-alpha.2",
   "license": "Apache-2.0",
   "files": ["extension.js", "cli.js", "README.md"],
-  "scripts": {
-    "test": "node --test test/*.test.js"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saterdoe/oberth.git"
   },
-  "engines": {"vscode": "^1.90.0"},
+  "categories": ["Other"],
+  "keywords": ["agents", "coding", "review", "worktree"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
   "main": "./extension.js",
-  "activationEvents": ["onCommand:oberth.run", "onCommand:oberth.status", "onCommand:oberth.review", "onCommand:oberth.openControlRoom"],
+  "activationEvents": [
+    "onCommand:oberth.run",
+    "onCommand:oberth.status",
+    "onCommand:oberth.review",
+    "onCommand:oberth.openControlRoom"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "package": "node ../../scripts/package-vsix.mjs",
+    "test:integration": "node test/integration/runTest.cjs"
+  },
   "contributes": {
     "commands": [
-      {"command": "oberth.run", "title": "oberth: Run intention"},
-      {"command": "oberth.status", "title": "oberth: Show task status"},
-      {"command": "oberth.review", "title": "oberth: Review latest diff"},
-      {"command": "oberth.openControlRoom", "title": "oberth: Open Control Room"}
+      {
+        "command": "oberth.run",
+        "title": "oberth: Run intention"
+      },
+      {
+        "command": "oberth.status",
+        "title": "oberth: Show task status"
+      },
+      {
+        "command": "oberth.review",
+        "title": "oberth: Review latest diff"
+      },
+      {
+        "command": "oberth.openControlRoom",
+        "title": "oberth: Open Control Room"
+      }
     ],
     "configuration": {
       "title": "oberth",
       "properties": {
-        "oberth.cliPath": {"type": "string", "default": "", "description": "Optional CLI path. Empty uses the standard per-user install or PATH."},
-        "oberth.apiUrl": {"type": "string", "default": "http://127.0.0.1:9090"},
-        "oberth.uiUrl": {"type": "string", "default": "http://127.0.0.1:5173"}
+        "oberth.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional CLI path. Empty uses the standard per-user install or PATH."
+        },
+        "oberth.apiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:9090"
+        },
+        "oberth.uiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:5173"
+        }
       }
     }
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "2.5.2",
+    "@vscode/vsce": "3.6.0"
   }
 }

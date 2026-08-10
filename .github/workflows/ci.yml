@@ -50,6 +50,52 @@ jobs:
           path: artifacts/coverage
           if-no-files-found: warn
 
+  portable-cli:
+    name: Portable setup smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build CLI and local service with the setup script
+        run: ./scripts/setup-cli.sh
+      - name: Smoke-test installed commands
+        run: |
+          ./bin/oberth version
+          ./bin/oberth-server -h
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race ./internal/api ./internal/gateway ./internal/toolrunner ./pkg/git
+
+  durable-e2e:
+    name: Durable E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -tags e2e ./internal/api -run TestDurableRunHTTPHappyPath -count=1
+
   architecture-smoke:
     name: Smoke (${{ matrix.goos }}/${{ matrix.goarch }})
     strategy:

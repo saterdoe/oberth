@@ -43,9 +43,11 @@ Oberth's application chrome; user and model messages, repository paths,
 identifiers, source code and technical evidence are always preserved verbatim.
 
 Windows is the primary tested desktop platform in this alpha. The CLI and
-service run on Linux and macOS with less release coverage. Oberth is currently
-single-user and local-first; hosted administration, team roles and
-multi-tenant isolation are intentionally outside the public alpha.
+local service are continuously verified on current GitHub-hosted Linux and
+macOS runners; the native desktop application is not packaged or smoke-tested
+there. Oberth is currently single-user and local-first; hosted administration,
+team roles and multi-tenant isolation are intentionally outside the public
+alpha.
 
 ## Quick start
 
@@ -173,6 +175,7 @@ persists across restarts. To contribute another locale, follow
 ## Known alpha limitations
 
 - Windows is the primary tested desktop platform.
+- Linux and macOS CI covers the CLI and local service, not the desktop app.
 - The supported deployment is local and single-user.
 - Configuration and storage formats may change before beta.
 - Coding-agent reliability and tool use vary by provider and model.

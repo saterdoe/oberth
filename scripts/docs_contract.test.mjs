@@ -11,12 +11,14 @@ const required = {
     '0.1.0-alpha.2',
     'docs/QUICKSTART.md',
     'Apache-2.0',
+    'continuously verified on current GitHub-hosted Linux and',
   ],
   'docs/QUICKSTART.md': [
     'Requirements',
     'Configure a provider',
     'Run and review a task',
     'Troubleshooting',
+    'complete `check-release.sh` verification on both Linux and macOS',
   ],
   'docs/ARCHITECTURE.md': [
     'Main components',

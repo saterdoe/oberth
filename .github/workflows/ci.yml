@@ -27,6 +27,32 @@ jobs:
       - run: go test ./cmd/... ./internal/... ./pkg/...
       - run: go build ./cmd/oberth ./cmd/oberth-server
 
+  portable-cli:
+    name: CLI release check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build CLI and local service with the setup script
+        run: ./scripts/setup-cli.sh
+      - name: Smoke-test installed commands
+        run: |
+          ./bin/oberth version
+          ./bin/oberth-server -h
+      - name: Run the platform release verification
+        run: ./scripts/check-release.sh
+
   race:
     name: Race detector
     runs-on: ubuntu-latest

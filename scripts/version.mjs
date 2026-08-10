@@ -14,9 +14,10 @@ const windowsVersion = version => {
 }
 
 const jsonTargets = ['package.json', 'ui/package.json', 'extensions/vscode/package.json']
-const lockTargets = ['package-lock.json', 'ui/package-lock.json']
+const lockTargets = ['package-lock.json', 'ui/package-lock.json', 'extensions/vscode/package-lock.json']
 const textTargets = [
   'README.md',
+  'CONTRIBUTING.md',
   'docs/QUICKSTART.md',
   'SECURITY.md',
   'ui/src/i18n.test.tsx',

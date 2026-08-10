@@ -4,21 +4,32 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.3
+
 ### Added
 
 - Multi-project Code Workspace with CodeMirror tabs and directory navigation.
-- Real-time session and Vault updates over WebSocket.
-- Progressive disclosure for project code-index status: four projects are
-  shown initially and additional projects load in small batches.
-- Blocked and failed tasks can be closed without losing their recorded history.
+- Real-time session and Vault updates over WebSocket, plus progressive project
+  index disclosure and safe closure of blocked or failed tasks.
+- A bounded shared context envelope for task execution.
+- Supported architecture matrix for Linux, macOS and Windows CLI/service builds.
+- Reproducible GitHub Release assets with licenses, notices, checksums and SBOMs.
+- Native packaged-artifact smoke tests and a reproducible, install-tested VSIX.
+- A release runbook covering verification, publication, rollback and evidence.
+
+### Changed
+
+- The version contract now keeps application, extension, documentation and
+  platform metadata synchronized from the canonical `VERSION` file.
+- CI now exercises portable setup on Linux and macOS, quality gates, race and
+  durable E2E tests, architecture smokes and VS Code extension tests.
 
 ### Fixed
 
 - Project opening no longer leaves the explorer stuck loading.
-- Locale switching now translates application chrome without modifying user or
+- Locale switching translates application chrome without modifying user or
   model messages, repository paths, identifiers, code, or technical payloads.
-- Clean GitHub Actions checkouts no longer require generated desktop assets for
-  the cross-platform Go test job.
+- Clean GitHub Actions checkouts no longer require generated desktop assets.
 
 ## 0.1.0-alpha.2
 

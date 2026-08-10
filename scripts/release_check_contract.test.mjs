@@ -11,6 +11,7 @@ assert.deepEqual(
   [
     'Install root dependencies',
     'Install UI dependencies',
+    'Install VS Code extension dependencies',
     'Go tests',
     'Go vet',
     'Go builds',
@@ -20,6 +21,7 @@ assert.deepEqual(
     'UI build',
     'Documentation contract',
     'Release pipeline contract',
+    'Publishing workflow contract',
   ],
   'the release gate order is a versioned platform contract',
 )

@@ -36,11 +36,16 @@ if (platform !== 'windows') {
 }
 
 const checksumLines = fs.readFileSync(path.join(packageDir, 'SHA256SUMS'), 'utf8').trim().split(/\r?\n/)
+const checksummedFiles = new Set()
 for (const line of checksumLines) {
   const match = line.match(/^([a-f0-9]{64})\s+\*?(.+)$/i)
   assert.ok(match, `invalid checksum line: ${line}`)
   const data = fs.readFileSync(path.join(packageDir, match[2]))
   assert.equal(crypto.createHash('sha256').update(data).digest('hex'), match[1].toLowerCase(), `checksum mismatch for ${match[2]}`)
+  checksummedFiles.add(match[2])
+}
+for (const name of [cliName, serverName, 'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'sbom.spdx.json']) {
+  assert.ok(checksummedFiles.has(name), `checksum manifest does not cover ${name}`)
 }
 record(`verified ${checksumLines.length} checksums and required package contents`)
 

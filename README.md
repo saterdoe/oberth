@@ -51,9 +51,10 @@ alpha.
 
 ## Quick start
 
-This alpha is currently distributed from source. Clone or download the public
-repository, open a terminal in its root directory, and use the Windows desktop
-app for the most thoroughly tested experience.
+This alpha is available as platform-qualified CLI and local-service binaries,
+a VS Code extension package, and source. The Windows desktop app remains the
+most thoroughly tested experience; see the release assets and checksums for
+portable installations.
 
 Requirements:
 

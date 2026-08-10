@@ -16,6 +16,7 @@ if [ -n "$(find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
 fi
 
 artifact_count=0
+legal_files_copied=0
 for artifact_dir in "$SOURCE_ROOT"/oberth-*; do
   [ -d "$artifact_dir" ] || continue
   platform=${artifact_dir##*/}
@@ -62,6 +63,16 @@ for artifact_dir in "$SOURCE_ROOT"/oberth-*; do
   cp "$cli_source" "$OUTPUT_DIR/$cli_target"
   cp "$server_source" "$OUTPUT_DIR/$server_target"
   cp "$sbom_source" "$OUTPUT_DIR/oberth-$platform.spdx.json"
+  if [ "$legal_files_copied" -eq 0 ]; then
+    for legal_file in LICENSE NOTICE THIRD_PARTY_NOTICES.md; do
+      if [ ! -f "$artifact_dir/$legal_file" ]; then
+        echo "Artifact $platform is missing $legal_file." >&2
+        exit 1
+      fi
+      cp "$artifact_dir/$legal_file" "$OUTPUT_DIR/$legal_file"
+    done
+    legal_files_copied=1
+  fi
   artifact_count=$((artifact_count + 1))
 done
 
@@ -83,7 +94,7 @@ fi
 
 (
   cd "$OUTPUT_DIR"
-  sha256sum oberth-* > SHA256SUMS
+  sha256sum * > SHA256SUMS
 )
 
 echo "Prepared $artifact_count platform artifact sets and one VSIX in $OUTPUT_DIR."

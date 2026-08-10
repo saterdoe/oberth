@@ -108,7 +108,14 @@ try {
     if (Test-Path -LiteralPath $tokenFile) {
         $token = (Get-Content -LiteralPath $tokenFile -Raw).Trim()
     } else {
-        $token = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+        $tokenBytes = New-Object byte[] 32
+        $tokenGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+        try {
+            $tokenGenerator.GetBytes($tokenBytes)
+        } finally {
+            $tokenGenerator.Dispose()
+        }
+        $token = ([BitConverter]::ToString($tokenBytes) -replace '-', '').ToLowerInvariant()
         [System.IO.File]::WriteAllText($tokenFile, $token)
     }
     $env:OBERTH_AUTH_TOKEN = $token

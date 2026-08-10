@@ -59,13 +59,16 @@ jobs:
           ./dist/oberth-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} version
           ./dist/oberth-server-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} -h
           cp LICENSE NOTICE THIRD_PARTY_NOTICES.md dist/
-          cd dist
-          sha256sum * > SHA256SUMS
       - uses: anchore/sbom-action@v0
         with:
           path: dist
           format: spdx-json
           output-file: dist/sbom.spdx.json
+      - name: Checksum the complete packaged artifact
+        shell: bash
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: oberth-${{ matrix.goos }}-${{ matrix.goarch }}

@@ -1,7 +1,0 @@
-.vscodeignore
-test/**
-node_modules/**
-.vscode-test/**
-.tmp-release-test/**
-package-lock.json
-*.vsix

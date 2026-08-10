@@ -14,7 +14,10 @@ async function main() {
 
   await runTests({
     version,
-    extensionDevelopmentPath: path.resolve(__dirname, '../..'),
+    // Load only the tiny test harness as a development extension. Oberth must
+    // be discovered from the VSIX installed above, otherwise this smoke test
+    // would accidentally activate the source tree.
+    extensionDevelopmentPath: path.resolve(__dirname, 'harness'),
     extensionTestsPath: path.resolve(__dirname, 'suite', 'index.js'),
     launchArgs: ['--disable-workspace-trust'],
   })

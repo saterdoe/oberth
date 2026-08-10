@@ -96,6 +96,7 @@ export default function App() {
   const [taskStreams,setTaskStreams] = useState<Record<string,string>>({})
   const [taskToOpen,setTaskToOpen] = useState('')
   const [loadFailures,setLoadFailures] = useState(0)
+  const [hasLoaded,setHasLoaded] = useState(false)
 
   const load=async()=>{
       const result=await Promise.allSettled([
@@ -116,6 +117,7 @@ export default function App() {
       if(result[10].status==='fulfilled')setMemoryCandidates(result[10].value||[])
       const failed=result.filter(item=>item.status==='rejected').length
       setLoadFailures(failed)
+      setHasLoaded(true)
     }
   useEffect(()=>{
     void load()
@@ -156,7 +158,7 @@ export default function App() {
         <div className="side-bottom"><div className="side-separator"/><ProductTour onNavigate={(target:TourTarget)=>navigate(target as Tab)}/></div>
       </aside>
       <div className="content-frame">
-        {tab==='dash'&&<DashboardAdmin status={status} providers={providers} costs={costs} session={activeSession} sessions={sessions} tasks={tasks} onNewTask={()=>setTab('sess')} onOpenTask={id=>{setTaskToOpen(id);setTab('sess')}}/>}
+        {tab==='dash'&&<DashboardAdmin status={status} loaded={hasLoaded} providers={providers} costs={costs} session={activeSession} sessions={sessions} tasks={tasks} onNewTask={()=>setTab('sess')} onOpenTask={id=>{setTaskToOpen(id);setTab('sess')}}/>}
         {tab==='sess'&&<TaskWorkspace tasks={tasks} sessions={sessions} runs={runs} projects={projects} providers={providers} launchers={launchers} taskStreams={taskStreams} initialTaskID={taskToOpen} onChanged={load} onOpenSettings={()=>setTab('settings')}/>}
         {tab==='vault'&&<VaultPanel notes={notes} candidates={memoryCandidates} onChanged={load}/>}
         {tab==='routes'&&<RoutesPanel routes={routes} providers={providers} tasks={tasks} onChanged={load}/>}
@@ -191,7 +193,7 @@ function Dashboard({status,providers,costs,session}:{status:Status;providers:Pro
   </section>
 }
 
-function DashboardAdmin({status,tasks,onNewTask,onOpenTask}:{status:Status;providers:Provider[];costs:CostSummary;session?:Session;sessions:Session[];tasks:Task[];onNewTask:()=>void;onOpenTask:(id:string)=>void}){
+function DashboardAdmin({status,loaded,tasks,onNewTask,onOpenTask}:{status:Status;loaded:boolean;providers:Provider[];costs:CostSummary;session?:Session;sessions:Session[];tasks:Task[];onNewTask:()=>void;onOpenTask:(id:string)=>void}){
   const {t}=useI18n()
   const [visibleTaskCount,setVisibleTaskCount]=useState(8)
   const live=status.server?.state==='healthy'
@@ -203,7 +205,7 @@ function DashboardAdmin({status,tasks,onNewTask,onOpenTask}:{status:Status;provi
   const statusLabel=(value:string)=>({pending:t('status.pending'),running:t('status.running'),review:t('status.review'),blocked:t('status.blocked'),failed:t('status.failed'),completed:t('status.completed'),cancelled:t('status.cancelled')}[value]||value)
   return <section className="panel dash">
     <header className="page-header"><div><h1>{t('dashboard.title')}</h1><p>{t('dashboard.subtitle')}</p></div><button className="primary-action" onClick={onNewTask}>{t('dashboard.newTask')}</button></header>
-    {!live&&<div className="inline-notice error"><span><Dot color="var(--err)"/>{t('dashboard.serviceUnavailable')}</span><small>{t('dashboard.stale')}</small></div>}
+    {loaded&&!live&&<div className="inline-notice error"><span><Dot color="var(--err)"/>{t('dashboard.serviceUnavailable')}</span><small>{t('dashboard.stale')}</small></div>}
     <div className="overview-strip" aria-label={t('dashboard.title')}><div><span>{t('dashboard.attention')}</span><strong>{attention.length}</strong></div><div><span>{t('dashboard.running')}</span><strong>{running.length}</strong></div><div><span>{t('dashboard.errors')}</span><strong>{failed.length}</strong></div></div>
     <section className="content-section"><header><div><h2>{t('dashboard.recent')}</h2><p>{recent.length?t('dashboard.openTask'):t('dashboard.noRecent')}</p></div><span>{t('dashboard.total',{count:tasks.length})}</span></header>
       {recent.length?<><div className="data-list">{recent.map(task=><button type="button" className="data-row" key={task.id} aria-label={t('dashboard.openSession',{title:task.title})} onClick={()=>onOpenTask(task.id)}><i className={`task-state ${task.status}`}/><div><strong>{task.title}</strong><p>{task.description||t('dashboard.noDescription')}</p></div><span className={`status-text ${task.status}`}>{statusLabel(task.status)}</span><time>{relativeDate(task.updated_at)}</time></button>)}</div>{recent.length<orderedTasks.length&&<button type="button" className="load-more-tasks" onClick={()=>setVisibleTaskCount(count=>Math.min(count+8,orderedTasks.length))}>{t('dashboard.showMore',{count:orderedTasks.length-recent.length})}</button>}</>:<CompactEmpty text={t('dashboard.empty')} detail={t('dashboard.emptyDetail')}/>} {null}

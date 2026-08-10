@@ -113,6 +113,10 @@ for(const row of compatTranslations){
   }
 }
 const reviewedCompatOverrides=[
+  {source:'Actualizar',en:'Refresh',es:'Actualizar'},
+  {source:'Actualizando\u2026',en:'Refreshing\u2026',es:'Actualizando\u2026'},
+  {source:'Opciones de ejecuci\u00f3n',en:'Execution options',es:'Opciones de ejecuci\u00f3n'},
+  {source:'Usala solo cuando quieras asignar modelos diferentes a varias etapas.',en:'Use this only when you want to assign different models to multiple stages.',es:'Usala solo cuando quieras asignar modelos diferentes a varias etapas.'},
   {source:'No se pudo completar la acción: timeout',en:'The action could not be completed: timeout',es:'No se pudo completar la acción: timeout'},
   {source:'Ingresar ruta manualmente',en:'Enter path manually',es:'Ingresar ruta manualmente'},
   {source:'Modelo para esta solicitud',en:'Model for this request',es:'Modelo para esta solicitud'},

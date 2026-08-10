@@ -7,7 +7,7 @@ them your main checkout. Each task runs in an isolated Git worktree, records the
 commands and checks it performed, and waits for a human decision before its
 changes can be promoted.
 
-> **Public Alpha · 0.1.0-alpha.2**
+> **Public Alpha · 0.1.0-alpha.3**
 >
 > Oberth is ready for evaluation, not unattended production use. Interfaces,
 > configuration and storage formats may change before beta. Start with a test
@@ -43,15 +43,18 @@ Oberth's application chrome; user and model messages, repository paths,
 identifiers, source code and technical evidence are always preserved verbatim.
 
 Windows is the primary tested desktop platform in this alpha. The CLI and
-service run on Linux and macOS with less release coverage. Oberth is currently
-single-user and local-first; hosted administration, team roles and
-multi-tenant isolation are intentionally outside the public alpha.
+local service are continuously verified on current GitHub-hosted Linux and
+macOS runners; the native desktop application is not packaged or smoke-tested
+there. Oberth is currently single-user and local-first; hosted administration,
+team roles and multi-tenant isolation are intentionally outside the public
+alpha.
 
 ## Quick start
 
-This alpha is currently distributed from source. Clone or download the public
-repository, open a terminal in its root directory, and use the Windows desktop
-app for the most thoroughly tested experience.
+This alpha is available as platform-qualified CLI and local-service binaries,
+a VS Code extension package, and source. The Windows desktop app remains the
+most thoroughly tested experience; see the release assets and checksums for
+portable installations.
 
 Requirements:
 
@@ -140,6 +143,9 @@ The local service binds to loopback and uses a generated token. Do not expose
 its port to a network. See [Security](SECURITY.md) for trust boundaries and
 private vulnerability reporting.
 
+See the [supported platform matrix](docs/SUPPORT_MATRIX.md) for the exact OS,
+CPU architecture, shell, WSL, and desktop support boundaries.
+
 ## Development
 
 Run the release checks before submitting a change:
@@ -170,6 +176,7 @@ persists across restarts. To contribute another locale, follow
 ## Known alpha limitations
 
 - Windows is the primary tested desktop platform.
+- Linux and macOS CI covers the CLI and local service, not the desktop app.
 - The supported deployment is local and single-user.
 - Configuration and storage formats may change before beta.
 - Coding-agent reliability and tool use vary by provider and model.
@@ -183,6 +190,7 @@ persists across restarts. To contribute another locale, follow
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
+- [Release and rollback runbook](docs/RELEASE_RUNBOOK.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 There is no compatibility guarantee before beta. Breaking changes and required

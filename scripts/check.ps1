@@ -13,9 +13,13 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el analisis estatico de Go.' }
   & $npm --prefix ui run test
   if ($LASTEXITCODE -ne 0) { throw 'Fallaron los tests del frontend.' }
+  & $npm run test:extension
+  if ($LASTEXITCODE -ne 0) { throw 'Fallaron los tests de la extension de VS Code.' }
   & $npm --prefix ui run build
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el build del frontend.' }
   & $npm run test:docs
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el contrato de documentacion y release.' }
+  & $npm run test:release-workflow
+  if ($LASTEXITCODE -ne 0) { throw 'Fallo el contrato del workflow de publicacion.' }
   Write-Host 'Todas las verificaciones pasaron.' -ForegroundColor Green
 } finally { Pop-Location }

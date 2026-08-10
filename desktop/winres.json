@@ -26,11 +26,11 @@
         "info": {
           "0409": {
             "FileDescription": "Oberth — coding agents, under control",
-            "FileVersion": "0.1.0-alpha.2",
+            "FileVersion": "0.1.0-alpha.3",
             "InternalName": "oberth",
             "OriginalFilename": "oberth.exe",
             "ProductName": "Oberth",
-            "ProductVersion": "0.1.0-alpha.2"
+            "ProductVersion": "0.1.0-alpha.3"
           }
         }
       }

@@ -1,6 +1,6 @@
 # Quickstart
 
-Oberth 0.1.0-alpha.2 is a Public Alpha. Use a test repository or one with a
+Oberth 0.1.0-alpha.3 is a Public Alpha. Use a test repository or one with a
 clean backup, and review every generated change before approval.
 
 ## Requirements
@@ -10,6 +10,10 @@ clean backup, and review every generated change before approval.
 - Node.js 22 or newer when building the interface
 
 Windows is the primary desktop platform for this release.
+The complete CLI, service, desktop, architecture, WSL, and shell support policy
+is published in the [supported platform matrix](SUPPORT_MATRIX.md). The CLI and
+local service are continuously built, tested, and smoke-tested on Linux and
+macOS; the desktop application is not packaged or verified on those platforms.
 
 ## Start on Windows
 
@@ -45,6 +49,12 @@ updates.
 
 The service binds to loopback and requires a generated local token. Do not
 expose the service port to a network.
+
+The supported source workflow uses the repository scripts above. CI exercises
+`setup-cli.sh`, starts the resulting CLI and local-service binaries, and runs
+the complete `check-release.sh` verification on both Linux and macOS. Desktop
+packaging, browser launching, and OS-specific service installation remain
+outside that portable coverage.
 
 ## Configure a provider
 

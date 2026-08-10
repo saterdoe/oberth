@@ -1,6 +1,6 @@
 # Contributing to Oberth
 
-Oberth 0.1.0-alpha.2 is a Public Alpha. Focused bug reports, reproducible test
+Oberth 0.1.0-alpha.3 is a Public Alpha. Focused bug reports, reproducible test
 cases, documentation fixes and small improvements are especially valuable
 while public interfaces are still taking shape.
 
@@ -11,6 +11,8 @@ while public interfaces are still taking shape.
 - Node.js 22 or newer for the interface
 
 Follow the [Quickstart](docs/QUICKSTART.md) to set up the CLI and local service.
+The measured coverage and static-analysis checks are documented in
+[Quality gates](docs/QUALITY_GATES.md).
 
 ## Before submitting a change
 
@@ -28,10 +30,35 @@ Linux or macOS:
 ./scripts/check-release.sh
 ```
 
+Release operators must follow the [release and rollback runbook](docs/RELEASE_RUNBOOK.md).
+It defines the dry run, release-branch flow, go/no-go evidence, immutable tag,
+artifact verification, advancement to `main`, and recovery procedure.
+
 Changes to runtime states, events, result bundles, tools or structured CLI
 output must update the corresponding contract and tests. Do not commit runtime
 state, credentials, local tokens, databases, worktrees, build output or
 dependency directories.
+
+### Release versioning
+
+`VERSION` is the canonical Oberth release version. Runtime, package and Windows
+resource versions must agree with it. Validate the complete contract with:
+
+```text
+npm run version:check
+```
+
+To prepare a version change, first add the corresponding release section to
+`CHANGELOG.md`, then run:
+
+```text
+npm run version:set -- <semver>
+```
+
+The update command synchronizes the root and UI package metadata, lockfiles,
+the VS Code extension, Go runtime default, Windows resources and public version
+references. CI rejects version drift, missing changelog sections and release
+tags that do not equal `v` followed by the canonical version.
 
 ## Code and documentation
 

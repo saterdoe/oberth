@@ -1,53 +1,74 @@
 const vscode = require('vscode')
-const {execFile} = require('child_process')
-const fs = require('fs')
-const path = require('path')
+const {createCliAdapter} = require('./cli')
 
-function cli() {
-  const configured = vscode.workspace.getConfiguration('oberth').get('cliPath', '')
-  if (configured) return configured
-  const installed = process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'oberth', 'oberth.exe')
-  return installed && fs.existsSync(installed) ? installed : 'oberth'
+async function selectWorkspaceRoot(api) {
+  const folders = api.workspace.workspaceFolders || []
+  if (!folders.length) {
+    await api.window.showErrorMessage('Open a repository workspace before running Oberth.')
+    return undefined
+  }
+  if (folders.length === 1) return folders[0].uri.fsPath
+  const selected = await api.window.showQuickPick(
+    folders.map(folder => ({label: folder.name, description: folder.uri.fsPath, folder})),
+    {placeHolder: 'Select the repository for this Oberth command'},
+  )
+  return selected?.folder.uri.fsPath
 }
 
-function run(args, cwd) {
-  return new Promise((resolve, reject) => {
-    execFile(cli(), args, {cwd, windowsHide: true}, (error, stdout, stderr) => {
-      if (error) reject(new Error((stderr || error.message).trim()))
-      else resolve(stdout.trim())
-    })
-  })
-}
+function createCommands(api, cliAdapter) {
+  const reportErrors = handler => async () => {
+    try {
+      return await handler()
+    } catch (error) {
+      await api.window.showErrorMessage(error instanceof Error ? error.message : String(error))
+      return undefined
+    }
+  }
 
-function root() {
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  return {
+    'oberth.run': reportErrors(async () => {
+      const cwd = await selectWorkspaceRoot(api)
+      if (!cwd) return
+      const intention = await api.window.showInputBox({prompt: '¿Qué querés lograr en este repositorio?'})
+      if (!intention) return
+      await api.window.withProgress({location: api.ProgressLocation.Notification, title: 'oberth'}, async () => {
+        const output = await cliAdapter.run(['run', intention], cwd)
+        await api.window.showInformationMessage(output || 'Tarea iniciada')
+      })
+    }),
+    'oberth.status': reportErrors(async () => {
+      const cwd = await selectWorkspaceRoot(api)
+      if (!cwd) return
+      await api.window.showInformationMessage(await cliAdapter.run(['status'], cwd))
+    }),
+    'oberth.review': reportErrors(async () => {
+      const cwd = await selectWorkspaceRoot(api)
+      if (!cwd) return
+      const raw = await cliAdapter.run(['diff', '--output', 'json'], cwd)
+      let files
+      try {
+        files = JSON.parse(raw)
+      } catch {
+        throw new Error('Oberth returned invalid JSON while loading the latest diff.')
+      }
+      if (!Array.isArray(files)) throw new Error('Oberth returned an invalid diff response.')
+      const content = files.map(file => `diff --git a/${file.path} b/${file.path}\n${file.content || ''}`).join('\n\n')
+      const document = await api.workspace.openTextDocument({content: content || 'No file changes were recorded.', language: 'diff'})
+      await api.window.showTextDocument(document, {preview: false})
+    }),
+    'oberth.openControlRoom': reportErrors(async () => {
+      const url = api.workspace.getConfiguration('oberth').get('uiUrl', 'http://127.0.0.1:5173')
+      await api.env.openExternal(api.Uri.parse(url))
+    }),
+  }
 }
 
 async function activate(context) {
-  context.subscriptions.push(vscode.commands.registerCommand('oberth.run', async () => {
-    const intention = await vscode.window.showInputBox({prompt: '¿Qué querés lograr en este repositorio?'})
-    if (!intention || !root()) return
-    await vscode.window.withProgress({location: vscode.ProgressLocation.Notification, title: 'oberth'}, async () => {
-      const output = await run(['run', intention], root())
-      vscode.window.showInformationMessage(output || 'Tarea iniciada')
-    })
-  }))
-  context.subscriptions.push(vscode.commands.registerCommand('oberth.status', async () => {
-    if (!root()) return
-    vscode.window.showInformationMessage(await run(['status'], root()))
-  }))
-  context.subscriptions.push(vscode.commands.registerCommand('oberth.review', async () => {
-    if (!root()) return
-    const raw = await run(['diff', '--output', 'json'], root())
-    const files = JSON.parse(raw)
-    const content = files.map(file => `diff --git a/${file.path} b/${file.path}\n${file.content || ''}`).join('\n\n')
-    const document = await vscode.workspace.openTextDocument({content: content || 'No file changes were recorded.', language: 'diff'})
-    await vscode.window.showTextDocument(document, {preview: false})
-  }))
-  context.subscriptions.push(vscode.commands.registerCommand('oberth.openControlRoom', async () => {
-    const url = vscode.workspace.getConfiguration('oberth').get('uiUrl', 'http://127.0.0.1:5173')
-    await vscode.env.openExternal(vscode.Uri.parse(url))
-  }))
+  const configuredPath = vscode.workspace.getConfiguration('oberth').get('cliPath', '')
+  const commands = createCommands(vscode, createCliAdapter({configuredPath}))
+  for (const [name, handler] of Object.entries(commands)) {
+    context.subscriptions.push(vscode.commands.registerCommand(name, handler))
+  }
 }
 
-module.exports = {activate, deactivate() {}}
+module.exports = {activate, createCommands, deactivate() {}, selectWorkspaceRoot}

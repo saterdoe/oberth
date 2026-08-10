@@ -1,6 +1,6 @@
 {
   "name": "oberth",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "license": "Apache-2.0",
   "private": true,
   "engines": {
@@ -12,9 +12,17 @@
     "dev": "npm --prefix ui run dev",
     "build": "npm --prefix ui run build",
     "build:all": "npm run build",
-    "test": "npm --prefix ui run test",
+    "test": "npm --prefix ui run test && npm run test:extension",
+    "test:extension": "npm --prefix extensions/vscode test",
     "test:docs": "node scripts/docs_contract.test.mjs",
-    "typecheck": "npm --prefix ui run typecheck"
+    "typecheck": "npm --prefix ui run typecheck",
+    "version:check": "node scripts/version.mjs",
+    "version:set": "node scripts/version.mjs --set",
+    "quality": "node scripts/quality.mjs",
+    "test:release-contract": "node scripts/release_check_contract.test.mjs",
+    "check:release": "node scripts/release-check.mjs",
+    "test:release-workflow": "node scripts/release_workflow_contract.test.mjs",
+    "package:vscode": "node scripts/package-vsix.mjs"
   },
   "devDependencies": {
     "@boundaryml/baml": "^0.222.0",

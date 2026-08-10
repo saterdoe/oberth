@@ -1,6 +1,6 @@
 {
   "name": "oberth-web",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "engines": {
     "node": ">=22"
   },
@@ -11,6 +11,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b"
   },
   "dependencies": {

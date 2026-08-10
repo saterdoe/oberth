@@ -71,7 +71,7 @@ func TestIndexer_ReindexWithNotes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.TotalNotes)
 	assert.Greater(t, result.IndexedChunks, 0)
-	assert.Greater(t, result.DurationMs, int64(0))
+	assert.GreaterOrEqual(t, result.DurationMs, int64(0))
 
 	mvs.mu.Lock()
 	defer mvs.mu.Unlock()

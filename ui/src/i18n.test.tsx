@@ -2,8 +2,8 @@ import {fireEvent,render,screen} from '@testing-library/react'
 import {beforeEach,describe,expect,it} from 'vitest'
 import {I18nProvider,translate,useI18n} from './i18n'
 
-function Probe(){const{locale,setLocale,t}=useI18n();return <><span>{locale}</span><strong>{t('dashboard.newTask')}</strong><span>{t('nav.costs')}</span><code>Oberth v0.1.0-alpha.2</code><button onClick={()=>setLocale('es')}>switch</button></>}
-function LegacyProbe(){const{setLocale}=useI18n();return <><p>Revisá los cambios y decidí</p><p>No se pudo completar la acción: timeout</p><span>Ollama</span><code>projects/4a280ac68fd9/sessions/721fb570-e71a-4c82-8d4a-bd746b9356b5</code><button onClick={()=>setLocale('es')}>legacy-switch</button></>}
+function Probe(){const{locale,setLocale,t}=useI18n();return <><span>{locale}</span><strong>{t('dashboard.newTask')}</strong><span>{t('nav.costs')}</span><code>Oberth v0.1.0-alpha.3</code><button onClick={()=>setLocale('es')}>switch</button></>}
+function LegacyProbe(){const{setLocale}=useI18n();return <><p>Revisá los cambios y decidí</p><p>No se pudo completar la acción: timeout</p><p>{'Opciones de ejecuci\u00f3n'}</p><p>Usala solo cuando quieras asignar modelos diferentes a varias etapas.</p><button aria-label="Actualizar">Actualizar</button><span>Ollama</span><code>projects/4a280ac68fd9/sessions/721fb570-e71a-4c82-8d4a-bd746b9356b5</code><button onClick={()=>setLocale('es')}>legacy-switch</button></>}
 describe('i18n',()=>{
   beforeEach(()=>localStorage.clear())
   it('defaults to English and persists Spanish',()=>{
@@ -13,7 +13,7 @@ describe('i18n',()=>{
     expect(screen.getByText('Nueva tarea')).toBeInTheDocument()
     expect(screen.getByText('Costos')).toBeInTheDocument()
     expect(screen.queryByText('Costoos')).not.toBeInTheDocument()
-    expect(screen.getByText('Oberth v0.1.0-alpha.2')).toBeInTheDocument()
+    expect(screen.getByText('Oberth v0.1.0-alpha.3')).toBeInTheDocument()
     expect(screen.queryByText(/alfa/)).not.toBeInTheDocument()
     expect(localStorage.getItem('oberth.locale')).toBe('es')
     view.unmount()
@@ -25,10 +25,14 @@ describe('i18n',()=>{
     render(<I18nProvider><LegacyProbe/></I18nProvider>)
     expect(screen.getByText('Review the changes and decide')).toBeInTheDocument()
     expect(screen.getByText('The action could not be completed: timeout')).toBeInTheDocument()
+    expect(screen.getByText('Execution options')).toBeInTheDocument()
+    expect(screen.getByText('Use this only when you want to assign different models to multiple stages.')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Refresh'})).toHaveTextContent('Refresh')
     expect(screen.getByText('Ollama')).toBeInTheDocument()
     expect(screen.getByText('projects/4a280ac68fd9/sessions/721fb570-e71a-4c82-8d4a-bd746b9356b5')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'legacy-switch'}))
     expect(screen.getByText('Revisá los cambios y decidí')).toBeInTheDocument()
+    expect(screen.getByText('Opciones de ejecuci\u00f3n')).toBeInTheDocument()
     expect(screen.getByText('projects/4a280ac68fd9/sessions/721fb570-e71a-4c82-8d4a-bd746b9356b5')).toBeInTheDocument()
   })
 })

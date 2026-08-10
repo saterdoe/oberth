@@ -144,6 +144,8 @@ artifacts/
 /data/
 /.tmp-qa/
 /.tmp-release-test/
+extensions/vscode/.tmp-release-test/
+.vscode-test/
 /.qa-native/
 /.agents/
 /.codex/

@@ -707,24 +707,43 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 		}
 	}
 	compiled, compileErr := contextPipeline.CompileRepository(ctx, run.WorktreePath, task.Description, task.TaskType, compileOptions)
+	contextEnvelopeFingerprint := ""
 	if compileErr != nil {
 		runWarnings = append(runWarnings, "context compilation: "+compileErr.Error())
 	} else {
-		manifest, _ := json.Marshal(map[string]any{
-			"schema_version": "1",
-			"sources":        compiled.Manifest,
-			"exclusions":     compiled.Exclusions,
-			"metrics":        compiled.Metrics,
-			"retrieval":      retrievalMetrics,
-		})
-		session.ContextUsed = manifest
+		redactedConstraints := json.RawMessage(secretspkg.Redact(string(task.Constraints)))
+		if len(redactedConstraints) > 0 && !json.Valid(redactedConstraints) {
+			redactedConstraints, _ = json.Marshal(secretspkg.Redact(string(task.Constraints)))
+		}
+		envelope, envelopeErr := semcontext.NewContextEnvelopeV1(
+			semcontext.ContextEnvelopeTaskV1{
+				ID: task.ID.String(), Title: secretspkg.Redact(task.Title), Description: secretspkg.Redact(task.Description),
+				Type: task.TaskType, Constraints: redactedConstraints,
+			},
+			semcontext.ContextEnvelopeRepoV1{Identity: run.BaseRepo, BaseCommit: run.BaseCommit},
+			compiled,
+			retrievalMetrics,
+		)
+		if envelopeErr != nil {
+			runWarnings = append(runWarnings, "context envelope: "+envelopeErr.Error())
+		} else {
+			manifest, marshalErr := json.Marshal(envelope)
+			if marshalErr != nil {
+				runWarnings = append(runWarnings, "context envelope serialization: "+marshalErr.Error())
+			} else {
+				session.ContextUsed = manifest
+				contextEnvelopeFingerprint = envelope.Fingerprint
+				prompt += "\n\n## Context envelope\nSchema: " + envelope.SchemaVersion + "\nFingerprint: " + envelope.Fingerprint + "\nTreat the task, repository identity, base commit, and constraints associated with this fingerprint as immutable across workflow stages."
+			}
+		}
 		if strings.TrimSpace(compiled.Context) != "" {
 			prompt += "\n\n## Traced repository context\nEach excerpt begins with its canonical repository path and line range. Markdown headings inside an excerpt are content, never filenames. Only pass an exact canonical path shown at the start of an excerpt to read. The excerpts themselves may be used as evidence without reading them again.\n\n" + secretspkg.Redact(compiled.Context)
 		}
 		_ = s.appendRunEvent(ctx, run.ID, "context_compiled", map[string]any{
-			"manifest":   compiled.Manifest,
-			"exclusions": compiled.Exclusions,
-			"metrics":    compiled.Metrics,
+			"envelope_fingerprint": contextEnvelopeFingerprint,
+			"manifest":             compiled.Manifest,
+			"exclusions":           compiled.Exclusions,
+			"metrics":              compiled.Metrics,
 		})
 	}
 	executionStages := parseTaskExecutionPlan(task.Constraints)
@@ -743,7 +762,7 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 		if i >= developmentIndex {
 			break
 		}
-		output, stageErr := s.runWorkflowAdvisory(ctx, run, task, session, stage, prompt, "")
+		output, stageErr := s.runWorkflowAdvisory(ctx, run, task, session, stage, prompt, "", contextEnvelopeFingerprint)
 		if stageErr != nil {
 			runWarnings = append(runWarnings, fmt.Sprintf("stage %s failed: %v", stage.ID, stageErr))
 			_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_failed", map[string]any{"stage": stage, "error": stageErr.Error()})
@@ -1188,7 +1207,7 @@ a legitimate outcome and does not require a verification command.
 		diffJSON, _ := json.Marshal(currentDiff)
 		reviewContext := "## Candidate diff\n" + string(diffJSON) + "\n\n## Verification\n" + verificationStatus
 		for _, stage := range executionStages[developmentIndex+1:] {
-			output, stageErr := s.runWorkflowAdvisory(ctx, run, task, session, stage, prompt, reviewContext)
+			output, stageErr := s.runWorkflowAdvisory(ctx, run, task, session, stage, prompt, reviewContext, contextEnvelopeFingerprint)
 			if stageErr != nil {
 				runWarnings = append(runWarnings, fmt.Sprintf("stage %s failed: %v", stage.ID, stageErr))
 				_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_failed", map[string]any{"stage": stage, "error": stageErr.Error()})
@@ -1245,12 +1264,12 @@ func contextOptionsForProvider(options semcontext.CompileOptions, providerType s
 	return options
 }
 
-func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, stage taskExecutionStage, taskPrompt, extraContext string) (string, error) {
+func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, stage taskExecutionStage, taskPrompt, extraContext, contextEnvelopeFingerprint string) (string, error) {
 	system := "You are the " + stage.Role + " stage in a software delivery workflow. Do not claim to have changed files. Produce a concise, actionable handoff for the next stage."
 	if stage.Role == "qa" || stage.Role == "review" {
 		system += " Evaluate the supplied diff and verification evidence. End with exactly VERDICT: PASS or VERDICT: FAIL."
 	}
-	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_started", map[string]any{"stage": stage})
+	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_started", map[string]any{"stage": stage, "context_envelope_fingerprint": contextEnvelopeFingerprint})
 	response, err := s.executor.ExecuteStepStream(
 		ctx,
 		gateway.Step{ID: stage.ID, ProviderID: stage.ProviderID, Model: stage.Model},
@@ -1275,7 +1294,8 @@ func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task 
 	}
 	output := strings.TrimSpace(response.Content)
 	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_completed", map[string]any{
-		"stage": stage, "model": response.Model, "tokens_input": response.InputTokens,
+		"stage": stage, "context_envelope_fingerprint": contextEnvelopeFingerprint,
+		"model": response.Model, "tokens_input": response.InputTokens,
 		"tokens_output": response.OutputTokens, "output": secretspkg.Redact(output),
 	})
 	return output, nil

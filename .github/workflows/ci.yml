@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  go:
-    name: Go (${{ matrix.os }})
+  release-contract:
+    name: Release contract (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -21,11 +21,58 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # The desktop package embeds generated UI assets, which are built by the
-      # Web contracts job. Test the source packages here without requiring a
-      # generated frontend/dist directory in a clean checkout.
-      - run: go test ./cmd/... ./internal/... ./pkg/...
-      - run: go build ./cmd/oberth ./cmd/oberth-server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node scripts/release-check.mjs
+
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix ui ci
+      - run: npm run quality
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-reports
+          path: artifacts/coverage
+          if-no-files-found: warn
+
+  portable-cli:
+    name: Portable setup smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build CLI and local service with the setup script
+        run: ./scripts/setup-cli.sh
+      - name: Smoke-test installed commands
+        run: |
+          ./bin/oberth version
+          ./bin/oberth-server -h
 
   race:
     name: Race detector
@@ -49,17 +96,47 @@ jobs:
           cache: true
       - run: go test -tags e2e ./internal/api -run TestDurableRunHTTPHappyPath -count=1
 
-  web:
-    name: Web contracts
-    runs-on: ubuntu-latest
+  architecture-smoke:
+    name: Smoke (${{ matrix.goos }}/${{ matrix.goarch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, goos: linux, goarch: amd64, suffix: ""}
+          - {os: ubuntu-24.04-arm, goos: linux, goarch: arm64, suffix: ""}
+          - {os: macos-15-intel, goos: darwin, goarch: amd64, suffix: ""}
+          - {os: macos-14, goos: darwin, goarch: arm64, suffix: ""}
+          - {os: windows-2022, goos: windows, goarch: amd64, suffix: ".exe"}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build supported target
+        shell: bash
+        run: ./scripts/build-release.sh "${{ matrix.goos }}" "${{ matrix.goarch }}" smoke
+      - name: Execute native smoke tests
+        shell: bash
+        run: |
+          ./smoke/oberth-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} version
+          ./smoke/oberth-server-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} -h
+
+  vscode-extension:
+    name: VS Code extension (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm --prefix ui ci
-      - run: npm test
-      - run: npm run build:all
-      - run: npm run test:docs
+          cache-dependency-path: extensions/vscode/package-lock.json
+      - run: npm --prefix extensions/vscode ci
+      - run: npm run test:extension
+      - run: npm run test:release-workflow

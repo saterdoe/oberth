@@ -35,6 +35,7 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags="-s -w" -o "dist/oberth${{ matrix.suffix }}" ./cmd/oberth
           go build -trimpath -ldflags="-s -w" -o "dist/oberth-server${{ matrix.suffix }}" ./cmd/oberth-server
+          cp LICENSE NOTICE THIRD_PARTY_NOTICES.md dist/
           cd dist
           sha256sum * > SHA256SUMS
       - uses: anchore/sbom-action@v0
@@ -47,10 +48,43 @@ jobs:
           name: oberth-${{ matrix.goos }}
           path: dist/*
 
+  smoke-artifacts:
+    name: Smoke packaged artifact (${{ matrix.os }})
+    needs: artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+          - os: macos-latest
+            goos: darwin
+          - os: windows-latest
+            goos: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: oberth-${{ matrix.goos }}
+          path: package
+      - name: Verify package contents and run native smoke tests
+        run: node scripts/smoke-release-artifact.mjs package ${{ matrix.goos }}
+      - name: Preserve smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs-${{ matrix.goos }}
+          path: smoke-logs/*
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     if: github.ref_type == 'tag'
-    needs: artifacts
+    needs: smoke-artifacts
     runs-on: ubuntu-latest
     permissions:
       contents: write

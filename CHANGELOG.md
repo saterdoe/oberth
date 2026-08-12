@@ -12,6 +12,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   that preserves worktrees and skips confirmed external effects.
 - Crash-recoverable workspace transactions with durable before-images,
   metadata restoration and fault-injected create, replace, rename and delete tests.
+- Classified worktree lifecycle reconciliation with retention, dry-run reports,
+  dirty-worktree quarantine and fail-closed protection for recoverable runs.
 
 ### Changed
 

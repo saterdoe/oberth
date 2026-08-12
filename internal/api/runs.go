@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -569,28 +570,66 @@ func (s *Server) ReconcileInterruptedRuns(ctx context.Context) error {
 }
 
 func (s *Server) ReconcileTerminalWorktrees(ctx context.Context) error {
+	_, err := s.reconcileWorktrees(ctx, false)
+	return err
+}
+
+func (s *Server) ReconcileTerminalWorktreesDryRun(ctx context.Context) ([]gitpkg.WorktreePlan, error) {
+	return s.reconcileWorktrees(ctx, true)
+}
+
+func (s *Server) reconcileWorktrees(ctx context.Context, dryRun bool) ([]gitpkg.WorktreePlan, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT base_repository,worktree_path,branch
+		SELECT id::text,state,COALESCE(outcome,''),base_repository,worktree_path,branch,
+		       COALESCE(finished_at,started_at)
 		FROM task_runs
-		WHERE state IN ('cancelled','failed')
-		   OR outcome='rejected'`)
+		ORDER BY started_at`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
-	var cleanupErr error
+	var resources []gitpkg.WorktreeResource
+	var inspectErr error
 	for rows.Next() {
-		var worktree gitpkg.SessionWorktree
-		if err := rows.Scan(&worktree.Repository, &worktree.Path, &worktree.Branch); err != nil {
+		var resource gitpkg.WorktreeResource
+		if err := rows.Scan(&resource.RunID, &resource.State, &resource.Outcome,
+			&resource.Worktree.Repository, &resource.Worktree.Path, &resource.Worktree.Branch, &resource.Finished); err != nil {
+			return nil, err
+		}
+		dirty, err := gitpkg.WorktreeDirty(resource.Worktree.Path)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not a git repository") {
+				inspectErr = errors.Join(inspectErr, err)
+			}
+		} else {
+			resource.Dirty = dirty
+		}
+		resources = append(resources, resource)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	plans := gitpkg.PlanWorktreeLifecycle(resources, time.Now(), 24*time.Hour)
+	quarantine, err := filepath.Abs(filepath.Join("data", "worktree-quarantine"))
+	if err != nil {
+		return plans, err
+	}
+	var cleanupErr error
+	for _, plan := range plans {
+		if err := gitpkg.ExecuteWorktreePlan(plan, dryRun, quarantine); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 			continue
 		}
-		if err := gitpkg.CleanupSessionWorktree(worktree, true); err != nil &&
-			!errors.Is(err, os.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not a working tree") {
-			cleanupErr = errors.Join(cleanupErr, err)
+		if !dryRun && plan.Action != gitpkg.LifecycleKeep {
+			if id, parseErr := uuid.Parse(plan.Resource.RunID); parseErr == nil {
+				_ = s.appendRunEvent(ctx, id, "worktree_lifecycle", map[string]any{
+					"classification": plan.Classification, "action": plan.Action,
+					"reason": plan.Reason, "target": plan.Target,
+				})
+			}
 		}
 	}
-	return errors.Join(cleanupErr, rows.Err())
+	return plans, errors.Join(inspectErr, cleanupErr)
 }
 
 func hostname() string {

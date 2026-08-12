@@ -13,6 +13,7 @@ import (
 var (
 	ErrOutsideWorkspace = errors.New("path is outside workspace")
 	ErrSymlinkEscape    = errors.New("symlink resolves outside workspace")
+	ErrBoundaryResolve  = errors.New("workspace boundary could not be resolved")
 )
 
 type WorkspaceGuard struct {
@@ -28,6 +29,10 @@ func NewWorkspaceGuard(root string) (*WorkspaceGuard, error) {
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return nil, fmt.Errorf("resolve workspace: %w", err)
+	}
+	resolved, err = resolvePlatformPath(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace boundary: %w", err)
 	}
 	return &WorkspaceGuard{root: filepath.Clean(abs), resolvedRoot: filepath.Clean(resolved)}, nil
 }
@@ -62,7 +67,11 @@ func resolveExistingPrefix(path string) (string, error) {
 		if _, err := os.Lstat(current); err == nil {
 			resolved, err := filepath.EvalSymlinks(current)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("%w: %v", ErrBoundaryResolve, err)
+			}
+			resolved, err = resolvePlatformPath(resolved)
+			if err != nil {
+				return "", fmt.Errorf("%w: %v", ErrBoundaryResolve, err)
 			}
 			for i := len(suffix) - 1; i >= 0; i-- {
 				resolved = filepath.Join(resolved, suffix[i])

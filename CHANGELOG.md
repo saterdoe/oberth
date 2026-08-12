@@ -13,6 +13,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Crash-recoverable workspace transactions with durable before-images,
   metadata restoration and fault-injected create, replace, rename and delete tests.
 
+### Changed
+
+- Reviewed Git changes now promote through a repository-serialized, strict
+  fast-forward that revalidates the base commit and approved diff hash.
+
 ## 0.1.0-alpha.3
 
 ### Added

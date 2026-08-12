@@ -296,9 +296,104 @@ func TestPromoteSessionWorktreeRequiresApprovalAndPromotesCommit(t *testing.T) {
 	result, err := PromoteSessionWorktree(workspace, "accept change", Approval{Granted: true, Actor: "user:test"})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Commit)
+	promoted, err := CurrentCommit(dir)
+	require.NoError(t, err)
+	assert.Equal(t, result.Commit, promoted)
 	data, err := os.ReadFile(filepath.Join(dir, "accepted.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "accepted", string(data))
+}
+
+func TestReviewedPromotionRejectsChangedWorktreeAndBase(t *testing.T) {
+	dir := initRepo(t)
+	writeAndCommit(t, dir, "README.md", "base", "initial")
+	base, err := CurrentCommit(dir)
+	require.NoError(t, err)
+	workspace, err := CreateSessionWorktree(dir, t.TempDir(), "stale-review")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workspace.Path, "change.txt"), []byte("reviewed"), 0600))
+	reviewedHash, err := DiffHash(workspace.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workspace.Path, "change.txt"), []byte("changed later"), 0600))
+	_, err = PromoteReviewedSessionWorktree(workspace, base, reviewedHash, "promote", Approval{Granted: true, Actor: "user:test"})
+	require.ErrorIs(t, err, ErrStaleApproval)
+
+	require.NoError(t, os.WriteFile(filepath.Join(workspace.Path, "change.txt"), []byte("reviewed"), 0600))
+	reviewedHash, err = DiffHash(workspace.Path)
+	require.NoError(t, err)
+	writeAndCommit(t, dir, "other.txt", "advance", "advance base")
+	_, err = PromoteReviewedSessionWorktree(workspace, base, reviewedHash, "promote", Approval{Granted: true, Actor: "user:test"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "base branch advanced")
+}
+
+func TestReviewedPromotionRejectsDirtyCheckout(t *testing.T) {
+	dir := initRepo(t)
+	writeAndCommit(t, dir, "README.md", "base", "initial")
+	base, _ := CurrentCommit(dir)
+	workspace, err := CreateSessionWorktree(dir, t.TempDir(), "dirty-checkout")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workspace.Path, "change.txt"), []byte("reviewed"), 0600))
+	hash, err := DiffHash(workspace.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty"), 0600))
+	_, err = PromoteReviewedSessionWorktree(workspace, base, hash, "promote", Approval{Granted: true, Actor: "user:test"})
+	require.ErrorIs(t, err, ErrDirtyWorktree)
+}
+
+func TestConcurrentPromotionsAreSerialized(t *testing.T) {
+	dir := initRepo(t)
+	writeAndCommit(t, dir, "README.md", "base", "initial")
+	base, _ := CurrentCommit(dir)
+	root := t.TempDir()
+	one, err := CreateSessionWorktree(dir, root, "concurrent-one")
+	require.NoError(t, err)
+	two, err := CreateSessionWorktree(dir, root, "concurrent-two")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(one.Path, "one.txt"), []byte("one"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(two.Path, "two.txt"), []byte("two"), 0600))
+	oneHash, _ := DiffHash(one.Path)
+	twoHash, _ := DiffHash(two.Path)
+
+	errs := make(chan error, 2)
+	for _, candidate := range []struct {
+		worktree SessionWorktree
+		hash     string
+	}{{one, oneHash}, {two, twoHash}} {
+		go func(candidate struct {
+			worktree SessionWorktree
+			hash     string
+		}) {
+			_, promoteErr := PromoteReviewedSessionWorktree(candidate.worktree, base, candidate.hash, "promote", Approval{Granted: true, Actor: "user:test"})
+			errs <- promoteErr
+		}(candidate)
+	}
+	var succeeded, rejected int
+	for range 2 {
+		if err := <-errs; err == nil {
+			succeeded++
+		} else if strings.Contains(err.Error(), "base branch advanced") {
+			rejected++
+		} else {
+			t.Fatalf("unexpected promotion error: %v", err)
+		}
+	}
+	assert.Equal(t, 1, succeeded)
+	assert.Equal(t, 1, rejected)
+}
+
+func TestPromotionConflictAbortsCherryPick(t *testing.T) {
+	dir := initRepo(t)
+	writeAndCommit(t, dir, "shared.txt", "base", "initial")
+	workspace, err := CreateSessionWorktree(dir, t.TempDir(), "conflict")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workspace.Path, "shared.txt"), []byte("candidate"), 0600))
+	writeAndCommit(t, dir, "shared.txt", "main change", "advance")
+	_, err = PromoteSessionWorktree(workspace, "promote", Approval{Granted: true, Actor: "user:test"})
+	require.Error(t, err)
+	status, statusErr := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	require.NoError(t, statusErr)
+	assert.Empty(t, strings.TrimSpace(string(status)), "failed promotion must abort the cherry-pick")
 }
 
 func TestRevertFilesIsSelectiveAndTraversalSafe(t *testing.T) {

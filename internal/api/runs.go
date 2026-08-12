@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,6 +246,10 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var promotion *gitpkg.PromotionResult
+	var approvedEvidence struct {
+		DiffHash string `json:"diff_hash"`
+	}
+	_ = json.Unmarshal(resultBundle, &approvedEvidence)
 	approval := gitpkg.Approval{Granted: true, Actor: "user:local", Reason: req.Note}
 	switch req.Outcome {
 	case "accepted":
@@ -264,7 +267,7 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 		if message == "" {
 			message = "Accept oberth run " + id.String()
 		}
-		result, promoteErr := gitpkg.PromoteSessionWorktree(worktree, message, approval)
+		result, promoteErr := gitpkg.PromoteReviewedSessionWorktree(worktree, baseCommit, approvedEvidence.DiffHash, message, approval)
 		verificationOnly := false
 		if errors.Is(promoteErr, gitpkg.ErrNoChanges) {
 			// A verification-only run has nothing to promote, but its successful
@@ -415,12 +418,10 @@ func validatePromotionEvidence(worktreePath string, raw json.RawMessage) error {
 	if evidence.VerificationStatus != "passed" {
 		return fmt.Errorf("la promoción requiere verificación aprobada; estado actual: %q", evidence.VerificationStatus)
 	}
-	currentDiff, err := gitpkg.GetDiff(worktreePath)
+	currentHash, err := gitpkg.DiffHash(worktreePath)
 	if err != nil {
 		return fmt.Errorf("no se pudo recalcular el diff actual: %w", err)
 	}
-	diffBytes, _ := json.Marshal(currentDiff)
-	currentHash := fmt.Sprintf("sha256:%x", sha256.Sum256(diffBytes))
 	if evidence.DiffHash == "" || evidence.DiffHash != currentHash {
 		return fmt.Errorf("el diff cambió después de QA (verificado %s, actual %s)", evidence.DiffHash, currentHash)
 	}

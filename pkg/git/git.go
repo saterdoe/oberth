@@ -3,12 +3,42 @@ package git
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+func DiffHash(repoRoot string) (string, error) {
+	diff, err := GetDiff(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(diff)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(encoded)), nil
+}
+
+func DiffHashBetween(repoRoot, base, head string) (string, error) {
+	repo, err := DetectRepo(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	out, err := runCmd(context.Background(), "git", "-C", repo.Root, "-c", "core.quotePath=false", "diff", "--binary", base, head, "--")
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(parseDiff(string(out)))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(encoded)), nil
+}
 
 type RepoInfo struct {
 	Root       string `json:"root"`
@@ -95,10 +125,13 @@ func GetDiff(repoRoot string) ([]DiffFile, error) {
 		}
 		allDiffs += string(untrackedDiff)
 	}
-	if allDiffs == "" {
-		return []DiffFile{}, nil
-	}
+	return parseDiff(allDiffs), nil
+}
 
+func parseDiff(allDiffs string) []DiffFile {
+	if allDiffs == "" {
+		return []DiffFile{}
+	}
 	var files []DiffFile
 	lines := strings.Split(allDiffs, "\n")
 	var current DiffFile
@@ -128,7 +161,7 @@ func GetDiff(repoRoot string) ([]DiffFile, error) {
 	if current.Path != "" && current.Content != "" {
 		files = append(files, current)
 	}
-	return files, nil
+	return files
 }
 
 // CheckDiff runs Git's non-mutating whitespace/error validation directly.

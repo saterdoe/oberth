@@ -10,6 +10,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   backups, and automated prior-version result-bundle migration tests.
 - Durable interrupted-run checkpoints and audited, idempotent lease recovery
   that preserves worktrees and skips confirmed external effects.
+- Crash-recoverable workspace transactions with durable before-images,
+  metadata restoration and fault-injected create, replace, rename and delete tests.
 
 ## 0.1.0-alpha.3
 

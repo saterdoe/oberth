@@ -13,10 +13,12 @@
 .diff-file{border:1px solid var(--border);border-radius:5px;margin:7px 0;overflow:hidden}
 .diff-file summary{cursor:pointer;padding:8px 10px;background:var(--surface-2);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
 .diff-file summary button{margin-left:auto}
+.diff-file.viewed{border-color:color-mix(in srgb,var(--ok) 55%,var(--border))}.diff-file.viewed summary{color:var(--ok)}
 .diff-file .output-box{margin:0;border:0;border-top:1px solid var(--border);border-radius:0;max-height:360px;overflow:auto}
 .diff-content{padding:0!important;background:var(--bg0)}.diff-line{display:block;min-width:max-content;padding:0 10px}.diff-add{color:#b7dfbc;background:rgba(99,165,109,.13)}.diff-del{color:#f0b3b3;background:rgba(202,85,85,.13)}.diff-meta{color:#a9c7e9;background:rgba(111,147,191,.1)}.diff-notice{color:var(--warn)}.diff-context{color:var(--t2)}
 .promotion-readiness{padding:7px 9px;border:1px solid rgba(182,162,122,.3);border-radius:4px;background:var(--wd);color:var(--warn);font:10px/1.4 var(--mono)}
 .review-actions{display:grid;gap:7px}
+.review-actions.session-decision{position:sticky;top:0;z-index:4;box-shadow:0 5px 12px rgba(0,0,0,.22)}.promotion-readiness{display:grid;gap:3px}.promotion-readiness span:before{content:'• ';color:var(--warn)}
 .review-actions label{display:grid;gap:5px;color:var(--t2);font:10px var(--mono)}
 .review-actions textarea{min-height:68px;resize:vertical;background:var(--bg1);color:var(--t0);border:1px solid var(--b1);border-radius:4px;padding:8px;font:10px/1.5 var(--mono)}
 .changes-callout{display:grid;gap:5px;border:1px solid var(--b1);border-left:3px solid var(--warn);border-radius:4px;padding:9px;background:var(--bg2)}

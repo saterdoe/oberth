@@ -252,6 +252,13 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(resultBundle, &approvedEvidence)
 	approval := gitpkg.Approval{Granted: true, Actor: "user:local", Reason: req.Note}
+	if err := s.writeAudit(r.Context(), &sessionID, "run_outcome_requested", "user:local", map[string]any{
+		"target": worktree.Repository, "decision": req.Outcome, "run_id": id.String(),
+		"task_id": taskID.String(), "worktree": worktree.Path,
+	}); err != nil {
+		respondError(w, http.StatusServiceUnavailable, "AUDIT_REQUIRED", "the run outcome was not applied because mandatory audit failed", nil)
+		return
+	}
 	switch req.Outcome {
 	case "accepted":
 		if gateErr := validatePromotionEvidence(worktree.Path, resultBundle); gateErr != nil {

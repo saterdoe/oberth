@@ -111,6 +111,9 @@ func (s *Server) handleLogTerminalCommand(w http.ResponseWriter, r *http.Request
 	if req.WorkingDir != "" {
 		details["working_dir"] = req.WorkingDir
 	}
-	s.logAudit(r.Context(), sessionID, action, "user:local", details)
+	if err := s.writeAudit(r.Context(), sessionID, action, "user:local", details); err != nil {
+		respondError(w, http.StatusServiceUnavailable, "AUDIT_REQUIRED", "the command decision was not applied because mandatory audit failed", nil)
+		return
+	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "logged"})
 }

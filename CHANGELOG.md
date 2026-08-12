@@ -14,6 +14,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   metadata restoration and fault-injected create, replace, rename and delete tests.
 - Classified worktree lifecycle reconciliation with retention, dry-run reports,
   dirty-worktree quarantine and fail-closed protection for recoverable runs.
+- Tamper-evident, correlated security audit chains with structural secret
+  redaction and fail-closed recording for sensitive user decisions.
 
 ### Changed
 

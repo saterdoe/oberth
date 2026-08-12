@@ -22,3 +22,16 @@ func TestMarshalRedactedRemovesNestedSecrets(t *testing.T) {
 		t.Fatalf("redaction marker missing: %s", encoded)
 	}
 }
+
+func TestMarshalRedactedRemovesValuesBySensitiveKey(t *testing.T) {
+	encoded, err := MarshalRedacted(map[string]any{
+		"request": map[string]any{"password": "ordinary-looking-value", "nested": []any{map[string]any{"access_token": "opaque"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	if strings.Contains(text, "ordinary-looking-value") || strings.Contains(text, "opaque") {
+		t.Fatalf("structural secret remained: %s", text)
+	}
+}

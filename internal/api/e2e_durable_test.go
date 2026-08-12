@@ -458,6 +458,17 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	if len(warnings) == 0 {
 		t.Fatalf("provider failure did not preserve an actionable warning: %+v", failedBundle)
 	}
+	if err := audit.VerifyChain(context.Background()); err != nil {
+		t.Fatalf("valid audit chain was rejected: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE audit_log SET details=jsonb_set(details,'{tampered}','true'::jsonb,true)
+		WHERE sequence=(SELECT MAX(sequence) FROM audit_log)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := audit.VerifyChain(context.Background()); err == nil {
+		t.Fatal("tampered audit evidence was not detected")
+	}
 }
 
 func toolResponse(name, arguments string) *llm.ChatResponse {

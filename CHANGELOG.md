@@ -4,7 +4,7 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-## 0.1.0-alpha.5 - 2026-08-12
+## 0.1.0-alpha.6 - 2026-08-12
 
 ### Added
 
@@ -34,6 +34,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - Release packaging now resolves the generated VSIX before activation and
   computes artifact checksums with the native SHA-256 tool on macOS.
+- Release asset collection now ignores auxiliary dependency artifacts instead
+  of interpreting them as incomplete platform packages.
+
+## 0.1.0-alpha.5 - 2026-08-12 [withdrawn]
+
+- Withdrawn before publication after the final collector misclassified an
+  auxiliary dependency SBOM artifact as a platform package.
 
 ## 0.1.0-alpha.4 - 2026-08-12 [withdrawn]
 

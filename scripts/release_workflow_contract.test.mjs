@@ -29,5 +29,6 @@ for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md']) {
 }
 assert.match(collector, /\.spdx\.json/, 'each platform SBOM must remain a release asset')
 assert.match(collector, /vscode-extension\/\*\.vsix/, 'the verified VSIX must be included in release assets')
+assert.match(collector, /linux-amd64\|linux-arm64\|darwin-amd64\|darwin-arm64\|windows-amd64/, 'collector must ignore non-platform artifacts produced by dependency tooling')
 
 console.log('Release workflow contract passed.')

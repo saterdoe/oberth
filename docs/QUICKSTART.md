@@ -1,6 +1,6 @@
 # Quickstart
 
-Oberth 0.1.0-alpha.3 is a Public Alpha. Use a test repository or one with a
+Oberth 0.1.0-alpha.4 is a Public Alpha. Use a test repository or one with a
 clean backup, and review every generated change before approval.
 
 ## Requirements

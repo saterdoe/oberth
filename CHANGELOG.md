@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.4 - 2026-08-12
+
 ### Added
 
 - A versioned persisted-data migration policy, recoverable pre-migration
@@ -18,6 +20,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   redaction and fail-closed recording for sensitive user decisions.
 - Deterministic Chromium E2E coverage for critical English and Spanish user
   journeys, with screenshots and traces retained on failure.
+- A confidence-oriented review workspace with explicit readiness, blocker and
+  reviewed-file signals before repository promotion.
+- Contextual recovery and provider guidance in English and Spanish, with
+  versioned links to the relevant operating documentation.
 
 ### Changed
 

@@ -4,7 +4,7 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-## 0.1.0-alpha.4 - 2026-08-12
+## 0.1.0-alpha.5 - 2026-08-12
 
 ### Added
 
@@ -29,6 +29,16 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - Reviewed Git changes now promote through a repository-serialized, strict
   fast-forward that revalidates the base commit and approved diff hash.
+
+### Fixed
+
+- Release packaging now resolves the generated VSIX before activation and
+  computes artifact checksums with the native SHA-256 tool on macOS.
+
+## 0.1.0-alpha.4 - 2026-08-12 [withdrawn]
+
+- Withdrawn before artifact publication after cross-platform packaging checks
+  exposed a literal VSIX glob and an unavailable macOS checksum command.
 
 ## 0.1.0-alpha.3
 

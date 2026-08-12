@@ -68,7 +68,11 @@ jobs:
         shell: bash
         run: |
           cd dist
-          sha256sum * > SHA256SUMS
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum * > SHA256SUMS
+          else
+            shasum -a 256 * > SHA256SUMS
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: oberth-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -130,7 +134,10 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           cp vsix-a/oberth-vscode.vsix "vscode-extension/oberth-vscode-${VERSION}.vsix"
       - name: Install and activate the packaged extension
-        run: xvfb-run -a npm --prefix extensions/vscode run test:integration -- ../../vscode-extension/*.vsix
+        run: |
+          VSIX_PATH="$(find vscode-extension -maxdepth 1 -name '*.vsix' -print -quit)"
+          test -n "${VSIX_PATH}"
+          xvfb-run -a npm --prefix extensions/vscode run test:integration -- "../../${VSIX_PATH}"
       - uses: actions/upload-artifact@v4
         with:
           name: vscode-extension

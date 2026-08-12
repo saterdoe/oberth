@@ -16,6 +16,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   dirty-worktree quarantine and fail-closed protection for recoverable runs.
 - Tamper-evident, correlated security audit chains with structural secret
   redaction and fail-closed recording for sensitive user decisions.
+- Deterministic Chromium E2E coverage for critical English and Spanish user
+  journeys, with screenshots and traces retained on failure.
 
 ### Changed
 

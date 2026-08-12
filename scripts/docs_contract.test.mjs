@@ -47,6 +47,12 @@ const required = {
     'Rollback after publishing',
     'Recovery and evidence',
   ],
+  'docs/PERSISTED_DATA_MIGRATIONS.md': [
+    'Format inventory',
+    'Forward migration contract',
+    'Rollback and recovery',
+    'pre-migration-v',
+  ],
   'CONTRIBUTING.md': [
     'Development requirements',
     'Pull requests',

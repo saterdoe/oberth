@@ -4,6 +4,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- A versioned persisted-data migration policy, recoverable pre-migration
+  backups, and automated prior-version result-bundle migration tests.
+
 ## 0.1.0-alpha.3
 
 ### Added

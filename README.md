@@ -191,6 +191,7 @@ persists across restarts. To contribute another locale, follow
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 - [Release and rollback runbook](docs/RELEASE_RUNBOOK.md)
+- [Persisted-data migration policy](docs/PERSISTED_DATA_MIGRATIONS.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 There is no compatibility guarantee before beta. Breaking changes and required

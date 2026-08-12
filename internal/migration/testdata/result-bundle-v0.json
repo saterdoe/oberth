@@ -1,0 +1,5 @@
+{
+  "run_id": "fixture-run",
+  "summary": "Legacy result without an explicit schema version",
+  "diff": []
+}

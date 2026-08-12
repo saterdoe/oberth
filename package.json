@@ -1,6 +1,6 @@
 {
   "name": "oberth",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.6",
   "license": "Apache-2.0",
   "private": true,
   "engines": {
@@ -15,6 +15,7 @@
     "test": "npm --prefix ui run test && npm run test:extension",
     "test:extension": "npm --prefix extensions/vscode test",
     "test:docs": "node scripts/docs_contract.test.mjs",
+    "test:e2e:browser": "npm run build && node scripts/browser-e2e.mjs",
     "typecheck": "npm --prefix ui run typecheck",
     "version:check": "node scripts/version.mjs",
     "version:set": "node scripts/version.mjs --set",

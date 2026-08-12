@@ -325,17 +325,46 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	if err := server.ReconcileInterruptedRuns(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	var recoveredRun, recoveredTask, recoveredSession string
+	var recoveredRun, recoveredTask, recoveredSession, recoveredWorktree string
+	var resumeFromSequence int64
+	var recoveryCount int
 	if err := pool.QueryRow(context.Background(), `
-		SELECT r.state,t.status,s.status
+		SELECT r.state,t.status,s.status,r.worktree_path,r.resume_from_sequence,r.recovery_count
 		FROM task_runs r
 		JOIN tasks t ON t.id=r.task_id
 		JOIN sessions s ON s.id=r.session_id
-		WHERE r.id=$1`, runID).Scan(&recoveredRun, &recoveredTask, &recoveredSession); err != nil {
+		WHERE r.id=$1`, runID).Scan(&recoveredRun, &recoveredTask, &recoveredSession, &recoveredWorktree, &resumeFromSequence, &recoveryCount); err != nil {
 		t.Fatal(err)
 	}
 	if recoveredRun != "interrupted" || recoveredTask != "blocked" || recoveredSession != "blocked" {
 		t.Fatalf("unexpected recovered states: run=%s task=%s session=%s", recoveredRun, recoveredTask, recoveredSession)
+	}
+	if resumeFromSequence == 0 || recoveryCount != 1 {
+		t.Fatalf("missing durable recovery checkpoint: sequence=%d count=%d", resumeFromSequence, recoveryCount)
+	}
+	if _, err := os.Stat(recoveredWorktree); err != nil {
+		t.Fatalf("interrupted worktree was not preserved: %v", err)
+	}
+	var interruptionEvents int
+	var artifactsPreserved bool
+	if err := pool.QueryRow(context.Background(), `
+		SELECT COUNT(*),COALESCE(bool_and((payload->>'artifacts_preserved')::boolean),false)
+		FROM run_events WHERE run_id=$1 AND event_type='run_interrupted'`, runID).Scan(&interruptionEvents, &artifactsPreserved); err != nil {
+		t.Fatal(err)
+	}
+	if interruptionEvents != 1 || !artifactsPreserved {
+		t.Fatalf("unexpected interruption evidence: events=%d artifacts_preserved=%v", interruptionEvents, artifactsPreserved)
+	}
+	if err := server.ReconcileInterruptedRuns(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(), `
+		SELECT recovery_count,(SELECT COUNT(*) FROM run_events WHERE run_id=$1 AND event_type='run_interrupted')
+		FROM task_runs WHERE id=$1`, runID).Scan(&recoveryCount, &interruptionEvents); err != nil {
+		t.Fatal(err)
+	}
+	if recoveryCount != 1 || interruptionEvents != 1 {
+		t.Fatalf("recovery was not idempotent: count=%d events=%d", recoveryCount, interruptionEvents)
 	}
 
 	fake.append(toolResponse("finish", `{"summary":"Claimed success without verification."}`))
@@ -428,6 +457,17 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	warnings, _ := failedBundle["warnings"].([]any)
 	if len(warnings) == 0 {
 		t.Fatalf("provider failure did not preserve an actionable warning: %+v", failedBundle)
+	}
+	if err := audit.VerifyChain(context.Background()); err != nil {
+		t.Fatalf("valid audit chain was rejected: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE audit_log SET details=jsonb_set(details,'{tampered}','true'::jsonb,true)
+		WHERE sequence=(SELECT MAX(sequence) FROM audit_log)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := audit.VerifyChain(context.Background()); err == nil {
+		t.Fatal("tampered audit evidence was not detected")
 	}
 }
 

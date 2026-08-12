@@ -16,6 +16,8 @@ assert.match(workflow, /cmp vsix-a\/oberth-vscode\.vsix vsix-b\/oberth-vscode\.v
 assert.match(workflow, /test:integration/, 'the packaged extension must be installed and activated')
 assert.match(integrationRunner, /extensionDevelopmentPath: path\.resolve\(__dirname, 'harness'\)/, 'VSIX activation must use a separate test harness')
 assert.ok(workflow.indexOf('output-file: dist/sbom.spdx.json') < workflow.indexOf('sha256sum * > SHA256SUMS'), 'the SBOM must exist before package checksums are generated')
+assert.match(workflow, /shasum -a 256 \* > SHA256SUMS/, 'macOS artifacts must use the available SHA-256 tool')
+assert.match(workflow, /find vscode-extension .* -name '\*\.vsix'/, 'VSIX integration must resolve the packaged file instead of passing a literal glob')
 assert.match(workflow, /needs: \[smoke-artifacts, vscode-extension\]/, 'publishing must wait for VSIX verification')
 assert.match(workflow, /contents: write/, 'only the publish job may write release content')
 assert.match(workflow, /gh release create/, 'tag builds must create a GitHub Release')
@@ -27,5 +29,6 @@ for (const legalFile of ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md']) {
 }
 assert.match(collector, /\.spdx\.json/, 'each platform SBOM must remain a release asset')
 assert.match(collector, /vscode-extension\/\*\.vsix/, 'the verified VSIX must be included in release assets')
+assert.match(collector, /linux-amd64\|linux-arm64\|darwin-amd64\|darwin-arm64\|windows-amd64/, 'collector must ignore non-platform artifacts produced by dependency tooling')
 
 console.log('Release workflow contract passed.')

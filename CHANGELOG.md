@@ -4,6 +4,49 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.6 - 2026-08-12
+
+### Added
+
+- A versioned persisted-data migration policy, recoverable pre-migration
+  backups, and automated prior-version result-bundle migration tests.
+- Durable interrupted-run checkpoints and audited, idempotent lease recovery
+  that preserves worktrees and skips confirmed external effects.
+- Crash-recoverable workspace transactions with durable before-images,
+  metadata restoration and fault-injected create, replace, rename and delete tests.
+- Classified worktree lifecycle reconciliation with retention, dry-run reports,
+  dirty-worktree quarantine and fail-closed protection for recoverable runs.
+- Tamper-evident, correlated security audit chains with structural secret
+  redaction and fail-closed recording for sensitive user decisions.
+- Deterministic Chromium E2E coverage for critical English and Spanish user
+  journeys, with screenshots and traces retained on failure.
+- A confidence-oriented review workspace with explicit readiness, blocker and
+  reviewed-file signals before repository promotion.
+- Contextual recovery and provider guidance in English and Spanish, with
+  versioned links to the relevant operating documentation.
+
+### Changed
+
+- Reviewed Git changes now promote through a repository-serialized, strict
+  fast-forward that revalidates the base commit and approved diff hash.
+
+### Fixed
+
+- Release packaging now resolves the generated VSIX before activation and
+  computes artifact checksums with the native SHA-256 tool on macOS.
+- Release asset collection now ignores auxiliary dependency artifacts instead
+  of interpreting them as incomplete platform packages.
+
+## 0.1.0-alpha.5 - 2026-08-12 [withdrawn]
+
+- Withdrawn before publication after the final collector misclassified an
+  auxiliary dependency SBOM artifact as a platform package.
+
+## 0.1.0-alpha.4 - 2026-08-12 [withdrawn]
+
+- Withdrawn before artifact publication after cross-platform packaging checks
+  exposed a literal VSIX glob and an unavailable macOS checksum command.
+
 ## 0.1.0-alpha.3
 
 ### Added

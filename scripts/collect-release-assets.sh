@@ -21,6 +21,10 @@ for artifact_dir in "$SOURCE_ROOT"/oberth-*; do
   [ -d "$artifact_dir" ] || continue
   platform=${artifact_dir##*/}
   platform=${platform#oberth-}
+  case "$platform" in
+    linux-amd64|linux-arm64|darwin-amd64|darwin-arm64|windows-amd64) ;;
+    *) continue ;;
+  esac
 
   cli_source=
   server_source=

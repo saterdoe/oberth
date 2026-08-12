@@ -549,19 +549,10 @@ func (s *Server) findIdempotentRun(ctx context.Context, taskID uuid.UUID, idempo
 }
 
 func (s *Server) cleanupSupersededTaskWorktrees(ctx context.Context, taskID uuid.UUID) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT base_repository,worktree_path,branch FROM task_runs
-		WHERE task_id=$1 AND state IN ('blocked','failed','interrupted','cancelled')`, taskID)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var worktree gitpkg.SessionWorktree
-		if rows.Scan(&worktree.Repository, &worktree.Path, &worktree.Branch) == nil {
-			_ = gitpkg.CleanupSessionWorktree(worktree, true)
-		}
-	}
+	// Lifecycle reconciliation classifies every resource and preserves blocked,
+	// interrupted and recently terminal worktrees. A new attempt must never
+	// bypass retention by force-deleting the previous attempt.
+	_ = s.ReconcileTerminalWorktrees(ctx)
 }
 
 func (s *Server) taskRepositoryPath(ctx context.Context, repositoryID *uuid.UUID) string {

@@ -104,7 +104,39 @@ func MarshalRedacted(value any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte(Redact(string(encoded))), nil
+	var structured any
+	if err := json.Unmarshal(encoded, &structured); err != nil {
+		return nil, err
+	}
+	redactStructured(structured)
+	return json.Marshal(structured)
+}
+
+func redactStructured(value any) {
+	switch current := value.(type) {
+	case map[string]any:
+		for key, child := range current {
+			lower := strings.ToLower(key)
+			if strings.Contains(lower, "password") || strings.Contains(lower, "secret") ||
+				strings.Contains(lower, "token") || strings.Contains(lower, "api_key") || strings.Contains(lower, "apikey") {
+				current[key] = "[REDACTED]"
+				continue
+			}
+			if text, ok := child.(string); ok {
+				current[key] = Redact(text)
+			} else {
+				redactStructured(child)
+			}
+		}
+	case []any:
+		for index, child := range current {
+			if text, ok := child.(string); ok {
+				current[index] = Redact(text)
+			} else {
+				redactStructured(child)
+			}
+		}
+	}
 }
 
 func SanitizeKey(key string) string {

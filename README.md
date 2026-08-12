@@ -7,7 +7,7 @@ them your main checkout. Each task runs in an isolated Git worktree, records the
 commands and checks it performed, and waits for a human decision before its
 changes can be promoted.
 
-> **Public Alpha · 0.1.0-alpha.3**
+> **Public Alpha · 0.1.0-alpha.6**
 >
 > Oberth is ready for evaluation, not unattended production use. Interfaces,
 > configuration and storage formats may change before beta. Start with a test
@@ -191,6 +191,7 @@ persists across restarts. To contribute another locale, follow
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 - [Release and rollback runbook](docs/RELEASE_RUNBOOK.md)
+- [Persisted-data migration policy](docs/PERSISTED_DATA_MIGRATIONS.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 There is no compatibility guarantee before beta. Breaking changes and required

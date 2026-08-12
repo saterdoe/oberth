@@ -18,8 +18,9 @@ var ErrAbsolutePath = errors.New("workspace paths must be relative")
 // Service is the only filesystem boundary exposed to application code.
 // Callers provide relative paths; the service validates traversal and symlinks.
 type Service struct {
-	root  string
-	guard *permission.WorkspaceGuard
+	root            string
+	guard           *permission.WorkspaceGuard
+	transactionHook func(string) error
 }
 
 type Change struct {
@@ -44,7 +45,11 @@ func New(root string) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{root: filepath.Clean(abs), guard: guard}, nil
+	service := &Service{root: filepath.Clean(abs), guard: guard}
+	if err := service.RecoverTransactions(context.Background()); err != nil {
+		return nil, fmt.Errorf("recover workspace transactions: %w", err)
+	}
+	return service, nil
 }
 
 func (s *Service) Root() string { return s.root }
@@ -207,17 +212,18 @@ func (s *Service) Apply(ctx context.Context, id string, changes []Change) (Chang
 		}
 		set.Before[change.Path] = append([]byte(nil), current...)
 	}
+	operations := make([]Operation, 0, len(changes))
 	for _, change := range changes {
-		var err error
+		kind := OperationReplace
 		if set.Created[change.Path] {
-			err = s.Create(ctx, change.Path, change.Content)
-		} else {
-			err = s.WriteExisting(ctx, change.Path, change.Content)
+			kind = OperationCreate
 		}
-		if err != nil {
-			_ = s.Rollback(context.WithoutCancel(ctx), set)
-			return ChangeSet{}, err
-		}
+		operations = append(operations, Operation{Kind: kind, Path: change.Path, Content: change.Content})
+	}
+	if err := s.ApplyOperations(ctx, id, operations); err != nil {
+		return ChangeSet{}, err
+	}
+	for _, change := range changes {
 		set.Changes = append(set.Changes, change.Path)
 	}
 	return set, nil

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,7 +20,10 @@ var (
 	ErrNoChanges        = errors.New("worktree has no changes to accept")
 	ErrUnsafePath       = errors.New("path escapes repository")
 	ErrUserChanges      = errors.New("files changed after the agent edit")
+	ErrStaleApproval    = errors.New("reviewed diff no longer matches the worktree")
 )
+
+var promotionLocks sync.Map
 
 type Approval struct {
 	Granted bool   `json:"granted"`
@@ -34,8 +38,9 @@ type SessionWorktree struct {
 }
 
 type PromotionResult struct {
-	Commit string `json:"commit"`
-	Branch string `json:"branch"`
+	Commit           string `json:"commit"`
+	Branch           string `json:"branch"`
+	ReviewedDiffHash string `json:"reviewed_diff_hash"`
 }
 
 // CheckPromotionReadiness verifies conditions that can be checked before the
@@ -149,6 +154,13 @@ func CleanupSessionWorktree(worktree SessionWorktree, force bool) error {
 // PromoteSessionWorktree commits the isolated changes and applies that commit
 // to the registered checkout only after an explicit user approval.
 func PromoteSessionWorktree(worktree SessionWorktree, message string, approval Approval) (PromotionResult, error) {
+	return PromoteReviewedSessionWorktree(worktree, "", "", message, approval)
+}
+
+// PromoteReviewedSessionWorktree serializes repository promotion and repeats
+// all approval-bound checks while holding that lock. reviewedDiffHash is the
+// exact GetDiff JSON hash approved by the reviewer.
+func PromoteReviewedSessionWorktree(worktree SessionWorktree, baseCommit, reviewedDiffHash, message string, approval Approval) (PromotionResult, error) {
 	if err := requireApproval(approval); err != nil {
 		return PromotionResult{}, err
 	}
@@ -167,8 +179,22 @@ func PromoteSessionWorktree(worktree SessionWorktree, message string, approval A
 		!sameDirectory(isolated.Root, worktree.Path) {
 		return PromotionResult{}, ErrUnsafePath
 	}
-	if err := CheckPromotionReadiness(worktree, ""); err != nil {
+	lockValue, _ := promotionLocks.LoadOrStore(strings.ToLower(repository.Root), &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if err := CheckPromotionReadiness(worktree, baseCommit); err != nil {
 		return PromotionResult{}, err
+	}
+	if reviewedDiffHash != "" {
+		currentHash, hashErr := DiffHash(worktree.Path)
+		if hashErr != nil {
+			return PromotionResult{}, hashErr
+		}
+		if currentHash != reviewedDiffHash {
+			return PromotionResult{}, fmt.Errorf("%w: reviewed %s, current %s", ErrStaleApproval, reviewedDiffHash, currentHash)
+		}
 	}
 	changed, err := runCmd(context.Background(), "git", "-C", worktree.Path, "status", "--porcelain")
 	if err != nil {
@@ -188,11 +214,30 @@ func PromoteSessionWorktree(worktree SessionWorktree, message string, approval A
 		return PromotionResult{}, err
 	}
 	hash := strings.TrimSpace(string(hashOutput))
-	if _, err := runCmd(context.Background(), "git", "-C", repository.Root, "cherry-pick", hash); err != nil {
-		_, _ = runCmd(context.Background(), "git", "-C", repository.Root, "cherry-pick", "--abort")
-		return PromotionResult{}, fmt.Errorf("promote isolated commit: %w", err)
+	if reviewedDiffHash != "" && baseCommit != "" {
+		committedHash, hashErr := DiffHashBetween(worktree.Path, baseCommit, hash)
+		if hashErr != nil {
+			return PromotionResult{}, hashErr
+		}
+		if committedHash != reviewedDiffHash {
+			return PromotionResult{}, fmt.Errorf("%w: reviewed %s, committed %s", ErrStaleApproval, reviewedDiffHash, committedHash)
+		}
 	}
-	return PromotionResult{Commit: hash, Branch: worktree.Branch}, nil
+	// The isolated branch starts at the approved base, so promotion must be a
+	// strict fast-forward. Git's ref lock makes the update atomic and rejects a
+	// concurrently advanced or divergent HEAD instead of merging unreviewed
+	// content or leaving a conflicted checkout behind.
+	if _, err := runCmd(context.Background(), "git", "-C", repository.Root, "merge", "--ff-only", hash); err != nil {
+		return PromotionResult{}, fmt.Errorf("promote reviewed commit: %w", err)
+	}
+	promotedCommit, err := CurrentCommit(repository.Root)
+	if err != nil {
+		return PromotionResult{}, err
+	}
+	if promotedCommit != hash {
+		return PromotionResult{}, fmt.Errorf("promoted commit %s does not match reviewed commit %s", promotedCommit, hash)
+	}
+	return PromotionResult{Commit: promotedCommit, Branch: worktree.Branch, ReviewedDiffHash: reviewedDiffHash}, nil
 }
 
 // sameDirectory compares filesystem identity instead of path spelling. Git and

@@ -2,12 +2,12 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -247,7 +247,18 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var promotion *gitpkg.PromotionResult
+	var approvedEvidence struct {
+		DiffHash string `json:"diff_hash"`
+	}
+	_ = json.Unmarshal(resultBundle, &approvedEvidence)
 	approval := gitpkg.Approval{Granted: true, Actor: "user:local", Reason: req.Note}
+	if err := s.writeAudit(r.Context(), &sessionID, "run_outcome_requested", "user:local", map[string]any{
+		"target": worktree.Repository, "decision": req.Outcome, "run_id": id.String(),
+		"task_id": taskID.String(), "worktree": worktree.Path,
+	}); err != nil {
+		respondError(w, http.StatusServiceUnavailable, "AUDIT_REQUIRED", "the run outcome was not applied because mandatory audit failed", nil)
+		return
+	}
 	switch req.Outcome {
 	case "accepted":
 		if gateErr := validatePromotionEvidence(worktree.Path, resultBundle); gateErr != nil {
@@ -264,7 +275,7 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 		if message == "" {
 			message = "Accept oberth run " + id.String()
 		}
-		result, promoteErr := gitpkg.PromoteSessionWorktree(worktree, message, approval)
+		result, promoteErr := gitpkg.PromoteReviewedSessionWorktree(worktree, baseCommit, approvedEvidence.DiffHash, message, approval)
 		verificationOnly := false
 		if errors.Is(promoteErr, gitpkg.ErrNoChanges) {
 			// A verification-only run has nothing to promote, but its successful
@@ -415,12 +426,10 @@ func validatePromotionEvidence(worktreePath string, raw json.RawMessage) error {
 	if evidence.VerificationStatus != "passed" {
 		return fmt.Errorf("la promoción requiere verificación aprobada; estado actual: %q", evidence.VerificationStatus)
 	}
-	currentDiff, err := gitpkg.GetDiff(worktreePath)
+	currentHash, err := gitpkg.DiffHash(worktreePath)
 	if err != nil {
 		return fmt.Errorf("no se pudo recalcular el diff actual: %w", err)
 	}
-	diffBytes, _ := json.Marshal(currentDiff)
-	currentHash := fmt.Sprintf("sha256:%x", sha256.Sum256(diffBytes))
 	if evidence.DiffHash == "" || evidence.DiffHash != currentHash {
 		return fmt.Errorf("el diff cambió después de QA (verificado %s, actual %s)", evidence.DiffHash, currentHash)
 	}
@@ -496,9 +505,12 @@ func (s *Server) finishDurableRun(ctx context.Context, runID uuid.UUID, state st
 func (s *Server) appendRunEvent(ctx context.Context, runID uuid.UUID, eventType string, payload any) error {
 	data, _ := secretspkg.MarshalRedacted(payload)
 	_, err := s.pool.Exec(ctx, `
+		WITH event_lock AS (
+			SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text,0))
+		)
 		INSERT INTO run_events (run_id, sequence, event_type, payload)
-		SELECT $1, COALESCE(MAX(sequence),0)+1, $2, $3
-		FROM run_events WHERE run_id=$1`, runID, eventType, data)
+		SELECT $1::uuid, COALESCE(MAX(sequence),0)+1, $2, $3
+		FROM event_lock LEFT JOIN run_events ON run_id=$1::uuid`, runID, eventType, data)
 	if err == nil && eventType == "agent_turn" {
 		_, _ = s.pool.Exec(ctx, `UPDATE task_runs SET first_action_at=COALESCE(first_action_at,NOW()) WHERE id=$1`, runID)
 	}
@@ -506,47 +518,125 @@ func (s *Server) appendRunEvent(ctx context.Context, runID uuid.UUID, eventType 
 }
 
 func (s *Server) ReconcileInterruptedRuns(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
-		WITH interrupted AS (
-			UPDATE task_runs SET state='interrupted', finished_at=NOW(), version=version+1
-			WHERE state='running' AND lease_expires_at < NOW()
-			RETURNING task_id, session_id
-		)
-		UPDATE tasks SET status='blocked', updated_at=NOW()
-		WHERE id IN (SELECT task_id FROM interrupted) AND status='running'`)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = s.pool.Exec(ctx, `
-		UPDATE sessions SET status='blocked', ended_at=NOW()
-		WHERE id IN (SELECT session_id FROM task_runs WHERE state='interrupted')
-		  AND status='active'`)
-	return err
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `
+		SELECT id,task_id,session_id,worktree_path,
+		       COALESCE((SELECT MAX(sequence) FROM run_events WHERE run_id=task_runs.id),0)
+		FROM task_runs
+		WHERE state='running' AND lease_expires_at < NOW()
+		FOR UPDATE SKIP LOCKED`)
+	if err != nil {
+		return err
+	}
+	type expiredRun struct {
+		id, taskID, sessionID uuid.UUID
+		worktree              string
+		lastSequence          int64
+	}
+	var expired []expiredRun
+	for rows.Next() {
+		var run expiredRun
+		if err := rows.Scan(&run.id, &run.taskID, &run.sessionID, &run.worktree, &run.lastSequence); err != nil {
+			rows.Close()
+			return err
+		}
+		expired = append(expired, run)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, run := range expired {
+		payload, _ := secretspkg.MarshalRedacted(map[string]any{
+			"reason": "lease_expired", "last_confirmed_sequence": run.lastSequence,
+			"worktree": run.worktree, "artifacts_preserved": true,
+		})
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO run_events(run_id,sequence,event_type,payload)
+			VALUES($1,$2,'run_interrupted',$3)`, run.id, run.lastSequence+1, payload); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE task_runs SET state='interrupted', finished_at=NOW(),
+				resume_from_sequence=$2, recovery_count=recovery_count+1, version=version+1
+			WHERE id=$1 AND state='running'`, run.id, run.lastSequence); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE tasks SET status='blocked',updated_at=NOW() WHERE id=$1 AND status='running'`, run.taskID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE sessions SET status='blocked',ended_at=NOW() WHERE id=$1 AND status='active'`, run.sessionID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Server) ReconcileTerminalWorktrees(ctx context.Context) error {
+	_, err := s.reconcileWorktrees(ctx, false)
+	return err
+}
+
+func (s *Server) ReconcileTerminalWorktreesDryRun(ctx context.Context) ([]gitpkg.WorktreePlan, error) {
+	return s.reconcileWorktrees(ctx, true)
+}
+
+func (s *Server) reconcileWorktrees(ctx context.Context, dryRun bool) ([]gitpkg.WorktreePlan, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT base_repository,worktree_path,branch
+		SELECT id::text,state,COALESCE(outcome,''),base_repository,worktree_path,branch,
+		       COALESCE(finished_at,started_at)
 		FROM task_runs
-		WHERE state IN ('cancelled','failed')
-		   OR outcome='rejected'`)
+		ORDER BY started_at`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
-	var cleanupErr error
+	var resources []gitpkg.WorktreeResource
+	var inspectErr error
 	for rows.Next() {
-		var worktree gitpkg.SessionWorktree
-		if err := rows.Scan(&worktree.Repository, &worktree.Path, &worktree.Branch); err != nil {
+		var resource gitpkg.WorktreeResource
+		if err := rows.Scan(&resource.RunID, &resource.State, &resource.Outcome,
+			&resource.Worktree.Repository, &resource.Worktree.Path, &resource.Worktree.Branch, &resource.Finished); err != nil {
+			return nil, err
+		}
+		dirty, err := gitpkg.WorktreeDirty(resource.Worktree.Path)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not a git repository") {
+				inspectErr = errors.Join(inspectErr, err)
+			}
+		} else {
+			resource.Dirty = dirty
+		}
+		resources = append(resources, resource)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	plans := gitpkg.PlanWorktreeLifecycle(resources, time.Now(), 24*time.Hour)
+	quarantine, err := filepath.Abs(filepath.Join("data", "worktree-quarantine"))
+	if err != nil {
+		return plans, err
+	}
+	var cleanupErr error
+	for _, plan := range plans {
+		if err := gitpkg.ExecuteWorktreePlan(plan, dryRun, quarantine); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 			continue
 		}
-		if err := gitpkg.CleanupSessionWorktree(worktree, true); err != nil &&
-			!errors.Is(err, os.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not a working tree") {
-			cleanupErr = errors.Join(cleanupErr, err)
+		if !dryRun && plan.Action != gitpkg.LifecycleKeep {
+			if id, parseErr := uuid.Parse(plan.Resource.RunID); parseErr == nil {
+				_ = s.appendRunEvent(ctx, id, "worktree_lifecycle", map[string]any{
+					"classification": plan.Classification, "action": plan.Action,
+					"reason": plan.Reason, "target": plan.Target,
+				})
+			}
 		}
 	}
-	return errors.Join(cleanupErr, rows.Err())
+	return plans, errors.Join(inspectErr, cleanupErr)
 }
 
 func hostname() string {

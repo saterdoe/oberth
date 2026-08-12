@@ -36,3 +36,17 @@ does not exist in a clean checkout. The web job separately builds that asset
 and the desktop/release workflows verify the native host.
 Exclusions or threshold reductions require an explanation in the pull request;
 improvements should raise the corresponding baseline.
+
+## Browser journeys
+
+Run the deterministic Chromium smoke locally with:
+
+```text
+npm run test:e2e:browser
+```
+
+It builds the production UI and exercises startup, task execution, reconnect
+recovery, review, export and decisions in English and Spanish without an
+external model provider. CI installs Chromium and runs the same command. A
+failure retains its Playwright trace and full-page screenshot under
+`artifacts/e2e/`.

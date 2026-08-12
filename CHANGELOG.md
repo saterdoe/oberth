@@ -8,6 +8,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - A versioned persisted-data migration policy, recoverable pre-migration
   backups, and automated prior-version result-bundle migration tests.
+- Durable interrupted-run checkpoints and audited, idempotent lease recovery
+  that preserves worktrees and skips confirmed external effects.
 
 ## 0.1.0-alpha.3
 

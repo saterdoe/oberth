@@ -496,9 +496,12 @@ func (s *Server) finishDurableRun(ctx context.Context, runID uuid.UUID, state st
 func (s *Server) appendRunEvent(ctx context.Context, runID uuid.UUID, eventType string, payload any) error {
 	data, _ := secretspkg.MarshalRedacted(payload)
 	_, err := s.pool.Exec(ctx, `
+		WITH event_lock AS (
+			SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text,0))
+		)
 		INSERT INTO run_events (run_id, sequence, event_type, payload)
-		SELECT $1, COALESCE(MAX(sequence),0)+1, $2, $3
-		FROM run_events WHERE run_id=$1`, runID, eventType, data)
+		SELECT $1::uuid, COALESCE(MAX(sequence),0)+1, $2, $3
+		FROM event_lock LEFT JOIN run_events ON run_id=$1::uuid`, runID, eventType, data)
 	if err == nil && eventType == "agent_turn" {
 		_, _ = s.pool.Exec(ctx, `UPDATE task_runs SET first_action_at=COALESCE(first_action_at,NOW()) WHERE id=$1`, runID)
 	}
@@ -506,22 +509,62 @@ func (s *Server) appendRunEvent(ctx context.Context, runID uuid.UUID, eventType 
 }
 
 func (s *Server) ReconcileInterruptedRuns(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
-		WITH interrupted AS (
-			UPDATE task_runs SET state='interrupted', finished_at=NOW(), version=version+1
-			WHERE state='running' AND lease_expires_at < NOW()
-			RETURNING task_id, session_id
-		)
-		UPDATE tasks SET status='blocked', updated_at=NOW()
-		WHERE id IN (SELECT task_id FROM interrupted) AND status='running'`)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = s.pool.Exec(ctx, `
-		UPDATE sessions SET status='blocked', ended_at=NOW()
-		WHERE id IN (SELECT session_id FROM task_runs WHERE state='interrupted')
-		  AND status='active'`)
-	return err
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `
+		SELECT id,task_id,session_id,worktree_path,
+		       COALESCE((SELECT MAX(sequence) FROM run_events WHERE run_id=task_runs.id),0)
+		FROM task_runs
+		WHERE state='running' AND lease_expires_at < NOW()
+		FOR UPDATE SKIP LOCKED`)
+	if err != nil {
+		return err
+	}
+	type expiredRun struct {
+		id, taskID, sessionID uuid.UUID
+		worktree              string
+		lastSequence          int64
+	}
+	var expired []expiredRun
+	for rows.Next() {
+		var run expiredRun
+		if err := rows.Scan(&run.id, &run.taskID, &run.sessionID, &run.worktree, &run.lastSequence); err != nil {
+			rows.Close()
+			return err
+		}
+		expired = append(expired, run)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, run := range expired {
+		payload, _ := secretspkg.MarshalRedacted(map[string]any{
+			"reason": "lease_expired", "last_confirmed_sequence": run.lastSequence,
+			"worktree": run.worktree, "artifacts_preserved": true,
+		})
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO run_events(run_id,sequence,event_type,payload)
+			VALUES($1,$2,'run_interrupted',$3)`, run.id, run.lastSequence+1, payload); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE task_runs SET state='interrupted', finished_at=NOW(),
+				resume_from_sequence=$2, recovery_count=recovery_count+1, version=version+1
+			WHERE id=$1 AND state='running'`, run.id, run.lastSequence); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE tasks SET status='blocked',updated_at=NOW() WHERE id=$1 AND status='running'`, run.taskID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE sessions SET status='blocked',ended_at=NOW() WHERE id=$1 AND status='active'`, run.sessionID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Server) ReconcileTerminalWorktrees(ctx context.Context) error {

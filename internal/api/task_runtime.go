@@ -551,7 +551,7 @@ func (s *Server) findIdempotentRun(ctx context.Context, taskID uuid.UUID, idempo
 func (s *Server) cleanupSupersededTaskWorktrees(ctx context.Context, taskID uuid.UUID) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT base_repository,worktree_path,branch FROM task_runs
-		WHERE task_id=$1 AND state IN ('blocked','failed','interrupted','cancelled')`, taskID)
+		WHERE task_id=$1 AND state IN ('blocked','failed','cancelled')`, taskID)
 	if err != nil {
 		return
 	}

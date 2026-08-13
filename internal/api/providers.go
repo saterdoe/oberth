@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/saterdoe/oberth/internal/config"
 	"github.com/saterdoe/oberth/internal/db"
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/gateway"
@@ -297,7 +298,7 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 
 	if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" {
-		apiKey, openErr := providersecret.Open(s.cfg.Auth.Token, *p.APIKeyEncrypted)
+		apiKey, openErr := providersecret.Open(providerSecretKey(s.cfg), *p.APIKeyEncrypted)
 		if openErr != nil {
 			respondError(w, http.StatusInternalServerError, "PROVIDER_SECRET_UNAVAILABLE", "provider credential could not be decrypted", nil)
 			return
@@ -360,7 +361,7 @@ func (s *Server) sealProviderAPIKey(apiKey *string) (*string, error) {
 	if apiKey == nil {
 		return nil, nil
 	}
-	sealed, err := providersecret.Seal(s.cfg.Auth.Token, *apiKey)
+	sealed, err := providersecret.Seal(providerSecretKey(s.cfg), *apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +387,7 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" {
-		apiKey, openErr := providersecret.Open(s.cfg.Auth.Token, *p.APIKeyEncrypted)
+		apiKey, openErr := providersecret.Open(providerSecretKey(s.cfg), *p.APIKeyEncrypted)
 		if openErr != nil {
 			respondError(w, http.StatusInternalServerError, "PROVIDER_SECRET_UNAVAILABLE", "provider credential could not be decrypted", nil)
 			return
@@ -416,6 +417,13 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 		"input_tokens":  result.InputTokens,
 		"output_tokens": result.OutputTokens,
 	})
+}
+
+func providerSecretKey(cfg *config.Config) string {
+	if strings.TrimSpace(cfg.Auth.ProviderSecretKey) != "" {
+		return cfg.Auth.ProviderSecretKey
+	}
+	return cfg.Auth.Token
 }
 
 func providerVerificationRequest(model string) llm.ChatRequest {

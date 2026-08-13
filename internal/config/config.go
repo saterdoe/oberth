@@ -136,8 +136,9 @@ type AuditConfig struct {
 }
 
 type AuthConfig struct {
-	Mode  string `mapstructure:"mode"`
-	Token string `mapstructure:"token"`
+	Mode              string `mapstructure:"mode"`
+	Token             string `mapstructure:"token"`
+	ProviderSecretKey string `mapstructure:"-"`
 }
 
 type RedisConfig struct {

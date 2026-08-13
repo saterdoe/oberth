@@ -12,7 +12,10 @@ import (
 	"strings"
 )
 
-const prefix = "enc:v1:"
+const (
+	prefix       = "enc:v2:local-key-v1:"
+	legacyPrefix = "enc:v1:"
+)
 
 // Seal encrypts a provider credential with a key derived from the daemon's
 // local authentication token. AES-GCM provides confidentiality and detects
@@ -57,6 +60,27 @@ func Open(authToken, stored string) (string, error) {
 	}
 	return string(plaintext), nil
 }
+
+func OpenLegacy(authToken, stored string) (string, error) {
+	if !strings.HasPrefix(stored, legacyPrefix) {
+		return stored, nil
+	}
+	aead, err := newAEAD(authToken)
+	if err != nil {
+		return "", err
+	}
+	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(stored, legacyPrefix))
+	if err != nil || len(raw) < aead.NonceSize() {
+		return "", errors.New("provider secret has invalid legacy encoding")
+	}
+	plaintext, err := aead.Open(nil, raw[:aead.NonceSize()], raw[aead.NonceSize():], nil)
+	if err != nil {
+		return "", errors.New("provider secret could not be decrypted")
+	}
+	return string(plaintext), nil
+}
+
+func IsLegacy(value string) bool { return strings.HasPrefix(value, legacyPrefix) }
 
 func IsSealed(value string) bool {
 	return strings.HasPrefix(value, prefix)

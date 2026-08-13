@@ -23,6 +23,7 @@ func serve(ctx context.Context, cfg *config.Config, apiServer *api.Server) error
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      240 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    32 * 1024,
 	}
 
 	quit := make(chan os.Signal, 1)

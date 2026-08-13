@@ -114,10 +114,12 @@ func NewServer(
 
 func (s *Server) Handler() http.Handler {
 	handler := http.Handler(s.mux)
+	handler = RequestHardening(handler)
 	if s.cfg.Auth.Mode != "none" {
 		handler = LocalAuth(s.cfg.Auth.Token, handler)
 	}
-	return RequestID(Logger(Recoverer(SecurityHeaders(LocalHostOnly(CORS(handler))))))
+	handler = LocalRateLimit(120, time.Minute, handler)
+	return RequestID(Logger(Recoverer(SecurityHeaders(LocalHostOnly(CORS(EndpointTimeout(60*time.Second, handler)))))))
 }
 
 // SetShutdown wires process lifecycle behavior without coupling embedded tests

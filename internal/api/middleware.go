@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,64 @@ const requestIDKey contextKey = "request_id"
 type wrappedWriter struct {
 	http.ResponseWriter
 	statusCode int
+}
+
+const maxRequestBodyBytes = 1024 * 1024
+
+func RequestHardening(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+			if media := strings.ToLower(strings.TrimSpace(strings.Split(r.Header.Get("Content-Type"), ";")[0])); media != "application/json" {
+				respondError(w, http.StatusUnsupportedMediaType, "CONTENT_TYPE_REQUIRED", "mutable requests require application/json", nil)
+				return
+			}
+		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func EndpointTimeout(timeout time.Duration, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ws/v1/events" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		http.TimeoutHandler(next, timeout, `{"error":{"code":"REQUEST_TIMEOUT","message":"request timed out"}}`).ServeHTTP(w, r)
+	})
+}
+
+type rateWindow struct {
+	start time.Time
+	count int
+}
+
+func LocalRateLimit(limit int, window time.Duration, next http.Handler) http.Handler {
+	var mu sync.Mutex
+	clients := map[string]rateWindow{}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if host == "" {
+			host = r.RemoteAddr
+		}
+		now := time.Now()
+		mu.Lock()
+		current := clients[host]
+		if current.start.IsZero() || now.Sub(current.start) >= window {
+			current = rateWindow{start: now}
+		}
+		current.count++
+		clients[host] = current
+		mu.Unlock()
+		if current.count > limit {
+			w.Header().Set("Retry-After", "60")
+			respondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "local request rate exceeded", nil)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 var _ http.Hijacker = (*wrappedWriter)(nil)

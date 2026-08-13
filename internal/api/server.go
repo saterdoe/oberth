@@ -99,7 +99,7 @@ func NewServer(
 		cfg:           cfg,
 		mux:           http.NewServeMux(),
 		soManager:     soManager,
-		eventHub:      NewHub(),
+		eventHub:      NewHub(pool),
 		perm:          permission.New(),
 		activeRuns:    map[uuid.UUID]stdcontext.CancelFunc{},
 		startingRuns:  map[uuid.UUID]startingRun{},

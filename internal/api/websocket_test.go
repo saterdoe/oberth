@@ -83,6 +83,15 @@ func TestHubBroadcastDoesNotBlockOnSlowClient(t *testing.T) {
 	if len(c.ch) > 64 {
 		t.Errorf("expected at most 64 buffered events, got %d", len(c.ch))
 	}
+	foundResync := false
+	for len(c.ch) > 0 {
+		if event := <-c.ch; event.Type == EventResyncRequired {
+			foundResync = true
+		}
+	}
+	if !foundResync {
+		t.Fatal("slow consumer overflow must emit an explicit resync event")
+	}
 }
 
 func TestHubMultipleEventTypes(t *testing.T) {

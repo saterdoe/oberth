@@ -7,11 +7,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/vault"
@@ -31,6 +33,8 @@ const (
 	EventTaskChunk       EventType = "task.chunk"
 	EventTaskStatus      EventType = "task.status"
 	EventToolEffect      EventType = "tool.effect"
+	EventStreamSnapshot  EventType = "stream.snapshot"
+	EventResyncRequired  EventType = "stream.resync_required"
 )
 
 type Event struct {
@@ -49,15 +53,27 @@ type client struct {
 }
 
 type Hub struct {
-	mu       sync.RWMutex
-	clients  map[*client]bool
-	sequence atomic.Uint64
+	mu        sync.RWMutex
+	clients   map[*client]bool
+	sequence  atomic.Uint64
+	pool      *pgxpool.Pool
+	persistMu sync.Mutex
 }
 
-func NewHub() *Hub {
-	return &Hub{
+func NewHub(pools ...*pgxpool.Pool) *Hub {
+	h := &Hub{
 		clients: make(map[*client]bool),
 	}
+	if len(pools) > 0 {
+		h.pool = pools[0]
+	}
+	if h.pool != nil {
+		var latest uint64
+		if h.pool.QueryRow(context.Background(), `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest) == nil {
+			h.sequence.Store(latest)
+		}
+	}
+	return h
 }
 
 func (h *Hub) Broadcast(evt Event) {
@@ -67,11 +83,11 @@ func (h *Hub) Broadcast(evt Event) {
 	if evt.ID == "" {
 		evt.ID = uuid.NewString()
 	}
-	if evt.Sequence == 0 {
-		evt.Sequence = h.sequence.Add(1)
-	}
 	if evt.Time.IsZero() {
 		evt.Time = time.Now().UTC()
+	}
+	if evt.Sequence == 0 {
+		evt.Sequence = h.persist(evt)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -80,9 +96,64 @@ func (h *Hub) Broadcast(evt Event) {
 		select {
 		case cl.ch <- evt:
 		default:
-			slog.Warn("websocket client too slow, dropping event", "type", evt.Type)
+			select {
+			case <-cl.ch:
+			default:
+			}
+			resync := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: evt.Sequence, Type: EventResyncRequired, Payload: map[string]any{"reason": "slow_consumer", "latest_sequence": evt.Sequence}, Time: time.Now().UTC()}
+			select {
+			case cl.ch <- resync:
+			default:
+			}
+			slog.Warn("websocket client requires resync", "type", evt.Type)
 		}
 	}
+}
+
+func (h *Hub) persist(evt Event) uint64 {
+	h.persistMu.Lock()
+	defer h.persistMu.Unlock()
+	if h.pool == nil {
+		return h.sequence.Add(1)
+	}
+	payload, err := json.Marshal(evt.Payload)
+	if err != nil {
+		return h.sequence.Add(1)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var seq uint64
+	err = h.pool.QueryRow(ctx, `INSERT INTO durable_events(event_id,version,event_type,aggregate_id,payload,created_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING sequence`, evt.ID, evt.Version, string(evt.Type), evt.AggregateID, payload, evt.Time).Scan(&seq)
+	if err != nil {
+		slog.Error("failed to persist websocket event", "error", err)
+		return h.sequence.Add(1)
+	}
+	h.sequence.Store(seq)
+	return seq
+}
+
+func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, error) {
+	if h.pool == nil || through <= after {
+		return nil, nil
+	}
+	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence`, after, through)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var payload []byte
+		if err := rows.Scan(&e.Sequence, &e.ID, &e.Version, &e.Type, &e.AggregateID, &payload, &e.Time); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(payload, &e.Payload); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
 }
 
 func (h *Hub) register(ctx context.Context) *client {
@@ -135,6 +206,11 @@ func (s *Server) broadcastTaskChunk(taskID, sessionID uuid.UUID, content string)
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	cursor, err := strconv.ParseUint(r.URL.Query().Get("cursor"), 10, 64)
+	if r.URL.Query().Get("cursor") != "" && err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_CURSOR", "cursor must be an unsigned sequence", nil)
+		return
+	}
 	subprotocols := []string{}
 	if authProtocol := websocketAuthProtocol(r.Header.Get("Sec-WebSocket-Protocol")); authProtocol != "" {
 		subprotocols = append(subprotocols, authProtocol)
@@ -153,6 +229,24 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	cl := s.eventHub.register(ctx)
 	defer s.eventHub.unregister(cl)
+	snapshotSequence := s.eventHub.sequence.Load()
+	replay, replayErr := s.eventHub.replay(ctx, cursor, snapshotSequence)
+	if replayErr != nil {
+		c.Close(websocket.StatusInternalError, "event replay unavailable")
+		return
+	}
+	snapshot := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventStreamSnapshot, Payload: map[string]any{"cursor": snapshotSequence, "replayed": len(replay)}, Time: time.Now().UTC()}
+	if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
+		if writeErr := c.Write(ctx, websocket.MessageText, data); writeErr != nil {
+			return
+		}
+	}
+	for _, event := range replay {
+		data, _ := json.Marshal(event)
+		if err := c.Write(ctx, websocket.MessageText, data); err != nil {
+			return
+		}
+	}
 
 	go func() {
 		defer cancel()
@@ -173,6 +267,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		case evt, ok := <-cl.ch:
 			if !ok {
 				return
+			}
+			if evt.Type != EventResyncRequired && evt.Sequence <= snapshotSequence {
+				continue
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {

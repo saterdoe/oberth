@@ -3,5 +3,5 @@
 package toolrunner
 
 func minimalEnvironmentNames() []string {
-	return []string{"PATH", "PATHEXT", "SYSTEMROOT", "TEMP", "TMP", "WINDIR"}
+	return []string{"LOCALAPPDATA", "PATH", "PATHEXT", "SYSTEMROOT", "TEMP", "TMP", "USERPROFILE", "WINDIR"}
 }

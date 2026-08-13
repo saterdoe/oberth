@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +19,10 @@ var ErrApprovalRequired = errors.New("command requires approval")
 type CommandLimits struct {
 	Timeout        time.Duration
 	MaxOutputBytes int
+	// AllowedEnv names the parent-process variables that may cross the command
+	// boundary. An empty list intentionally means no inherited variables except
+	// the small platform bootstrap set returned by minimalEnvironment.
+	AllowedEnv []string
 }
 
 type Command struct {
@@ -34,6 +39,13 @@ type CommandResult struct {
 	Output    string
 	Truncated bool
 	Duration  time.Duration
+	Limits    EffectiveLimits
+}
+
+type EffectiveLimits struct {
+	TimeoutMillis  int64    `json:"timeout_ms"`
+	MaxOutputBytes int      `json:"max_output_bytes"`
+	AllowedEnv     []string `json:"allowed_env"`
 }
 
 type CommandRunner struct {
@@ -65,13 +77,12 @@ func (r *CommandRunner) Run(ctx context.Context, command Command) (CommandResult
 	if timeout <= 0 {
 		timeout = time.Minute
 	}
+	result.Limits = EffectiveLimits{TimeoutMillis: timeout.Milliseconds(), MaxOutputBytes: r.limits.MaxOutputBytes, AllowedEnv: append([]string(nil), r.limits.AllowedEnv...)}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, command.Program, command.Args...)
 	cmd.Dir = command.Cwd
-	if len(command.Env) > 0 {
-		cmd.Env = append(os.Environ(), command.Env...)
-	}
+	cmd.Env = buildEnvironment(r.limits.AllowedEnv, command.Env)
 	configureProcessTree(cmd)
 	output := &streamBuffer{max: r.limits.MaxOutputBytes, callback: command.OnOutput}
 	cmd.Stdout, cmd.Stderr = output, output
@@ -133,3 +144,29 @@ func (w *streamBuffer) Write(data []byte) (int, error) {
 }
 
 func (w *streamBuffer) String() string { return w.buffer.String() }
+
+func buildEnvironment(allowedNames, explicit []string) []string {
+	allowed := map[string]struct{}{}
+	for _, name := range append(minimalEnvironmentNames(), allowedNames...) {
+		allowed[strings.ToUpper(strings.TrimSpace(name))] = struct{}{}
+	}
+	values := map[string]string{}
+	for _, entry := range os.Environ() {
+		name, value, found := strings.Cut(entry, "=")
+		if _, ok := allowed[strings.ToUpper(name)]; found && ok {
+			values[strings.ToUpper(name)] = name + "=" + value
+		}
+	}
+	for _, entry := range explicit {
+		name, _, found := strings.Cut(entry, "=")
+		if found {
+			values[strings.ToUpper(name)] = entry
+		}
+	}
+	result := make([]string, 0, len(values))
+	for _, entry := range values {
+		result = append(result, entry)
+	}
+	slices.Sort(result)
+	return result
+}

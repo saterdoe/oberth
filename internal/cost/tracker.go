@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -46,15 +46,15 @@ type BudgetStatus struct {
 
 // Tracker handles cost logging, budget checks, and alerts.
 type Tracker struct {
-	costLogRepo   *repos.CostLogRepo
-	budgetRepo    *repos.BudgetRepo
-	auditRepo     *repos.AuditRepo
-	reservationMu sync.Mutex
+	costLogRepo *repos.CostLogRepo
+	budgetRepo  *repos.BudgetRepo
+	auditRepo   *repos.AuditRepo
 }
 
 var ErrBudgetExceeded = errors.New("cost budget exceeded")
 
 type Reservation struct {
+	ID        uuid.UUID
 	BudgetIDs []uuid.UUID
 	Amount    float64
 }
@@ -63,52 +63,45 @@ func (t *Tracker) Reserve(ctx context.Context, providerID string, amount float64
 	if t == nil || amount <= 0 {
 		return &Reservation{}, nil
 	}
-	t.reservationMu.Lock()
-	defer t.reservationMu.Unlock()
-	budgets, err := t.budgetRepo.List(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var providerUUID uuid.UUID
+	var providerPtr *uuid.UUID
+	var err error
 	if providerID != "" {
 		providerUUID, err = uuid.Parse(providerID)
 		if err != nil {
 			return nil, err
 		}
+		providerPtr = &providerUUID
 	}
-	reservation := &Reservation{Amount: amount}
-	for _, budget := range budgets {
-		if !budget.IsActive || (budget.ProviderID != nil && *budget.ProviderID != providerUUID) {
-			continue
-		}
-		if budget.HardLimit > 0 && budget.CurrentSpend+amount > budget.HardLimit {
-			return nil, ErrBudgetExceeded
-		}
-		reservation.BudgetIDs = append(reservation.BudgetIDs, budget.ID)
+	persisted, err := t.budgetRepo.Reserve(ctx, providerPtr, amount, 15*time.Minute)
+	if errors.Is(err, repos.ErrBudgetReservationExceeded) {
+		return nil, ErrBudgetExceeded
 	}
-	for _, id := range reservation.BudgetIDs {
-		if err := t.budgetRepo.AddSpend(ctx, id, amount); err != nil {
-			for _, applied := range reservation.BudgetIDs {
-				if applied == id {
-					break
-				}
-				_ = t.budgetRepo.AddSpend(ctx, applied, -amount)
-			}
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
-	return reservation, nil
+	return &Reservation{ID: persisted.ID, BudgetIDs: persisted.BudgetIDs, Amount: amount}, nil
 }
 
 func (t *Tracker) Release(ctx context.Context, reservation *Reservation) {
 	if t == nil || reservation == nil || reservation.Amount <= 0 {
 		return
 	}
-	t.reservationMu.Lock()
-	defer t.reservationMu.Unlock()
-	for _, id := range reservation.BudgetIDs {
-		_ = t.budgetRepo.AddSpend(ctx, id, -reservation.Amount)
+	_ = t.budgetRepo.SetReservationState(ctx, reservation.ID, "released")
+}
+
+func (t *Tracker) Commit(ctx context.Context, reservation *Reservation) error {
+	if t == nil || reservation == nil || reservation.ID == uuid.Nil {
+		return nil
 	}
+	return t.budgetRepo.SetReservationState(ctx, reservation.ID, "committed")
+}
+
+func (t *Tracker) ReconcileExpired(ctx context.Context) (int64, error) {
+	if t == nil {
+		return 0, nil
+	}
+	return t.budgetRepo.ReconcileExpiredReservations(ctx)
 }
 
 // NewTracker creates a new Tracker.

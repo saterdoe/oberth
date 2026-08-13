@@ -95,6 +95,11 @@ func run() {
 	sessionRepo := repos.NewSessionRepo(pool)
 	costLogRepo := repos.NewCostLogRepo(pool)
 	budgetRepo := repos.NewBudgetRepo(pool)
+	if expired, reconcileErr := budgetRepo.ReconcileExpiredReservations(ctx); reconcileErr != nil {
+		slog.Warn("failed to reconcile expired cost reservations", "error", reconcileErr)
+	} else if expired > 0 {
+		slog.Info("reconciled expired cost reservations", "count", expired)
+	}
 	auditRepo := repos.NewAuditRepo(pool)
 	executionRepo := repos.NewExecutionLogRepo(pool)
 	approvalGateRepo := repos.NewApprovalGateRepo(pool)

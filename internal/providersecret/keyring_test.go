@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	keyring "github.com/zalando/go-keyring"
 )
 
 func TestResolveOrCreateFileKeyCreatesAndReusesPrivateKey(t *testing.T) {
@@ -28,6 +30,49 @@ func TestResolveOrCreateFileKeyCreatesAndReusesPrivateKey(t *testing.T) {
 		t.Fatal(err)
 	} else if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("provider key fallback permissions are too broad: %o", info.Mode().Perm())
+	}
+}
+
+func TestResolveOrCreateKeyConcurrentFirstUseSharesOneKey(t *testing.T) {
+	keyring.MockInit()
+	configDir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("AppData", configDir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", configDir)
+	}
+	_ = keyring.Delete(keyringService, keyringAccount)
+
+	const callers = 16
+	values := make(chan string, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value, err := ResolveOrCreateKey()
+			if err != nil {
+				errs <- err
+				return
+			}
+			values <- value
+		}()
+	}
+	wg.Wait()
+	close(values)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	stored, err := keyring.Get(keyringService, keyringAccount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for value := range values {
+		if value != stored {
+			t.Fatal("concurrent first-use callers did not converge on the persisted key")
+		}
 	}
 }
 

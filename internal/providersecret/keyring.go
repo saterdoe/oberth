@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gofrs/flock"
 	keyring "github.com/zalando/go-keyring"
 )
 
@@ -113,6 +114,23 @@ func fallbackKeyPath() (string, error) {
 }
 
 func ResolveOrCreateKey() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("locate provider key lock: %w", err)
+	}
+	lockDir := filepath.Join(configDir, "oberth")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		return "", fmt.Errorf("create provider key lock directory: %w", err)
+	}
+	keyLock := flock.New(filepath.Join(lockDir, ".provider-secret-key.lock"), flock.SetPermissions(0o600))
+	if err := keyLock.Lock(); err != nil {
+		return "", fmt.Errorf("lock provider key lifecycle: %w", err)
+	}
+	defer keyLock.Unlock()
+	return resolveOrCreateKeyLocked()
+}
+
+func resolveOrCreateKeyLocked() (string, error) {
 	value, err := keyring.Get(keyringService, keyringAccount)
 	if err == nil && value != "" {
 		if err := validateKey(value); err != nil {

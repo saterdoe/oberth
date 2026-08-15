@@ -92,8 +92,13 @@ func NewHub(pools ...*pgxpool.Pool) *Hub {
 		h.pool = pools[0]
 	}
 	if h.pool != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if _, err := h.pool.Exec(ctx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention)); err != nil {
+			slog.Warn("failed to prune expired websocket events at startup", "error", err)
+		}
 		var latest uint64
-		if h.pool.QueryRow(context.Background(), `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest) == nil {
+		if h.pool.QueryRow(ctx, `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest) == nil {
 			h.sequence.Store(latest)
 		}
 	}
@@ -167,7 +172,7 @@ func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, bool,
 	if h.pool == nil || through <= after {
 		return nil, false, nil
 	}
-	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence DESC LIMIT $3) recent ORDER BY sequence`, after, through, maxReplayEvents+1)
+	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 AND created_at >= $3 ORDER BY sequence DESC LIMIT $4) recent ORDER BY sequence`, after, through, time.Now().UTC().Add(-durableEventRetention), maxReplayEvents+1)
 	if err != nil {
 		return nil, false, err
 	}

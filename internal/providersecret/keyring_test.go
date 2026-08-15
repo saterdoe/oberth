@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -27,6 +28,41 @@ func TestResolveOrCreateFileKeyCreatesAndReusesPrivateKey(t *testing.T) {
 		t.Fatal(err)
 	} else if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("provider key fallback permissions are too broad: %o", info.Mode().Perm())
+	}
+}
+
+func TestResolveOrCreateFileKeyConcurrentCallersShareOneKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config", "provider.key")
+	const callers = 16
+	values := make(chan string, callers)
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value, err := resolveOrCreateFileKey(path)
+			if err != nil {
+				errs <- err
+				return
+			}
+			values <- value
+		}()
+	}
+	wg.Wait()
+	close(values)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var expected string
+	for value := range values {
+		if expected == "" {
+			expected = value
+		}
+		if value != expected {
+			t.Fatal("concurrent callers resolved different provider keys")
+		}
 	}
 }
 

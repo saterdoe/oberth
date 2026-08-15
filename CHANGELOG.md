@@ -37,9 +37,11 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   migration path; create and verify a database backup before upgrading.
 - Existing provider secrets remain readable while the dedicated key is created
   and persisted. Recovery must restore the provider-secret key together with
-  the database rather than substituting the daemon token. The key remains in
-  the operating-system credential store, which must be included in the
-  operator's profile backup; Oberth does not export it automatically.
+  the database rather than substituting the daemon token. The key uses the
+  operating-system credential store when available; on headless Unix hosts it
+  uses the owner-only `provider-secret-key-v1` file in Oberth's user config
+  directory. Back up the credential-store entry or fallback file together
+  with the database; Oberth does not export it automatically.
 
 ## 0.1.0-alpha.7 - 2026-08-14 [withdrawn]
 

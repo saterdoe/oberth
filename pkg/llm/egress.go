@@ -68,8 +68,17 @@ func NewEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {
 		if len(via) >= 5 {
 			return fmt.Errorf("too many provider redirects")
 		}
+		if len(via) > 0 && !sameProviderOrigin(via[len(via)-1].URL, req.URL) {
+			return fmt.Errorf("provider redirect changed origin")
+		}
 		return ValidateProviderURL(req.URL.String(), policy)
 	}}
+}
+
+func sameProviderOrigin(previous, next *url.URL) bool {
+	return previous != nil && next != nil &&
+		strings.EqualFold(previous.Scheme, next.Scheme) &&
+		strings.EqualFold(previous.Host, next.Host)
 }
 
 func newEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {

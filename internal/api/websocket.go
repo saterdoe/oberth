@@ -69,6 +69,18 @@ func durableEventPayload(evt Event) any {
 	if evt.Type == EventTaskChunk {
 		return map[string]any{"redacted": true, "reason": "ephemeral_stream_content"}
 	}
+	if evt.Type == EventTaskStatus || evt.Type == EventSessionComplete {
+		if payload, ok := evt.Payload.(map[string]any); ok {
+			redacted := make(map[string]any, len(payload))
+			for key, value := range payload {
+				if key != "summary" {
+					redacted[key] = value
+				}
+			}
+			redacted["summary_redacted"] = true
+			return redacted
+		}
+	}
 	return evt.Payload
 }
 
@@ -144,13 +156,20 @@ func (h *Hub) persist(evt Event) uint64 {
 	return seq
 }
 
-func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, error) {
-	if h.pool == nil || through <= after {
-		return nil, nil
+func trimReplayWindow(events []Event) ([]Event, bool) {
+	if len(events) <= maxReplayEvents {
+		return events, false
 	}
-	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence DESC LIMIT $3) recent ORDER BY sequence`, after, through, maxReplayEvents)
+	return events[len(events)-maxReplayEvents:], true
+}
+
+func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, bool, error) {
+	if h.pool == nil || through <= after {
+		return nil, false, nil
+	}
+	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence DESC LIMIT $3) recent ORDER BY sequence`, after, through, maxReplayEvents+1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 	var events []Event
@@ -158,14 +177,18 @@ func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, error
 		var e Event
 		var payload []byte
 		if err := rows.Scan(&e.Sequence, &e.ID, &e.Version, &e.Type, &e.AggregateID, &payload, &e.Time); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if err := json.Unmarshal(payload, &e.Payload); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		events = append(events, e)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	events, truncated := trimReplayWindow(events)
+	return events, truncated, nil
 }
 
 func (h *Hub) register(ctx context.Context) *client {
@@ -242,14 +265,21 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	cl := s.eventHub.register(ctx)
 	defer s.eventHub.unregister(cl)
 	snapshotSequence := s.eventHub.sequence.Load()
-	replay, replayErr := s.eventHub.replay(ctx, cursor, snapshotSequence)
+	replay, truncated, replayErr := s.eventHub.replay(ctx, cursor, snapshotSequence)
 	if replayErr != nil {
 		c.Close(websocket.StatusInternalError, "event replay unavailable")
 		return
 	}
-	snapshot := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventStreamSnapshot, Payload: map[string]any{"cursor": snapshotSequence, "replayed": len(replay)}, Time: time.Now().UTC()}
+	snapshot := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventStreamSnapshot, Payload: map[string]any{"cursor": snapshotSequence, "replayed": len(replay), "truncated": truncated}, Time: time.Now().UTC()}
 	if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
 		if writeErr := c.Write(ctx, websocket.MessageText, data); writeErr != nil {
+			return
+		}
+	}
+	if truncated {
+		resync := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventResyncRequired, Payload: map[string]any{"reason": "replay_window_exceeded", "latest_sequence": snapshotSequence}, Time: time.Now().UTC()}
+		data, _ := json.Marshal(resync)
+		if err := c.Write(ctx, websocket.MessageText, data); err != nil {
 			return
 		}
 	}

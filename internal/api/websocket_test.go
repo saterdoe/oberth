@@ -158,3 +158,28 @@ func TestProviderModelsEgressPolicyOnlyAllowsExplicitLocalTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestDurablePayloadRedactsResultSummary(t *testing.T) {
+	payload := durableEventPayload(Event{Type: EventSessionComplete, Payload: map[string]any{"session_id": "session-1", "summary": "private result"}})
+	redacted := payload.(map[string]any)
+	if _, leaked := redacted["summary"]; leaked || redacted["summary_redacted"] != true {
+		t.Fatalf("durable completion payload leaked result summary: %#v", payload)
+	}
+	if redacted["session_id"] != "session-1" {
+		t.Fatal("durable completion payload lost routing metadata")
+	}
+}
+
+func TestTrimReplayWindowSignalsGapAndKeepsNewestEvents(t *testing.T) {
+	events := make([]Event, maxReplayEvents+5)
+	for i := range events {
+		events[i].Sequence = uint64(i + 1)
+	}
+	trimmed, truncated := trimReplayWindow(events)
+	if !truncated || len(trimmed) != maxReplayEvents {
+		t.Fatalf("expected bounded replay with explicit truncation, got length=%d truncated=%v", len(trimmed), truncated)
+	}
+	if trimmed[0].Sequence != 6 || trimmed[len(trimmed)-1].Sequence != uint64(len(events)) {
+		t.Fatalf("expected newest replay window, got %d..%d", trimmed[0].Sequence, trimmed[len(trimmed)-1].Sequence)
+	}
+}

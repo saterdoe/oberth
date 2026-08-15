@@ -33,7 +33,8 @@ Oberth version against existing data.
 WebSocket delivery metadata in `durable_events` is a bounded reconnect cache,
 not a permanent audit log. It retains at most 24 hours, replays at most the most
 recent 1,000 events per connection, and never persists streamed `task.chunk`
-content. Durable run evidence remains in the versioned run-event store.
+content or free-form task summaries. Durable run evidence remains in the
+versioned run-event store.
 
 Unknown or malformed versions fail closed. A failed migration must leave the
 source path unchanged, must not overwrite an existing recovery backup with

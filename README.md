@@ -7,7 +7,7 @@ them your main checkout. Each task runs in an isolated Git worktree, records the
 commands and checks it performed, and waits for a human decision before its
 changes can be promoted.
 
-> **Public Alpha · 0.1.0-alpha.7**
+> **Public Alpha · 0.1.0-alpha.8**
 >
 > Oberth is ready for evaluation, not unattended production use. Interfaces,
 > configuration and storage formats may change before beta. Start with a test

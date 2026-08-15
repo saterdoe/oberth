@@ -2,7 +2,7 @@ import {fireEvent,render,screen} from '@testing-library/react'
 import {beforeEach,describe,expect,it} from 'vitest'
 import {I18nProvider,translate,useI18n} from './i18n'
 
-function Probe(){const{locale,setLocale,t}=useI18n();return <><span>{locale}</span><strong>{t('dashboard.newTask')}</strong><span>{t('nav.costs')}</span><code>Oberth v0.1.0-alpha.7</code><button onClick={()=>setLocale('es')}>switch</button></>}
+function Probe(){const{locale,setLocale,t}=useI18n();return <><span>{locale}</span><strong>{t('dashboard.newTask')}</strong><span>{t('nav.costs')}</span><code>Oberth v0.1.0-alpha.8</code><button onClick={()=>setLocale('es')}>switch</button></>}
 function LegacyProbe(){const{setLocale}=useI18n();return <><p>Revisá los cambios y decidí</p><p>No se pudo completar la acción: timeout</p><p>{'Opciones de ejecuci\u00f3n'}</p><p>Usala solo cuando quieras asignar modelos diferentes a varias etapas.</p><button aria-label="Actualizar">Actualizar</button><span>Ollama</span><code>projects/4a280ac68fd9/sessions/721fb570-e71a-4c82-8d4a-bd746b9356b5</code><button onClick={()=>setLocale('es')}>legacy-switch</button></>}
 describe('i18n',()=>{
   beforeEach(()=>localStorage.clear())
@@ -13,7 +13,7 @@ describe('i18n',()=>{
     expect(screen.getByText('Nueva tarea')).toBeInTheDocument()
     expect(screen.getByText('Costos')).toBeInTheDocument()
     expect(screen.queryByText('Costoos')).not.toBeInTheDocument()
-    expect(screen.getByText('Oberth v0.1.0-alpha.7')).toBeInTheDocument()
+    expect(screen.getByText('Oberth v0.1.0-alpha.8')).toBeInTheDocument()
     expect(screen.queryByText(/alfa/)).not.toBeInTheDocument()
     expect(localStorage.getItem('oberth.locale')).toBe('es')
     view.unmount()

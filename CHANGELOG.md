@@ -4,7 +4,7 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-## 0.1.0-alpha.7 - 2026-08-14
+## 0.1.0-alpha.8 - 2026-08-14
 
 ### Added
 
@@ -14,6 +14,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   metadata-service destinations.
 - A dedicated provider-secret encryption key lifecycle independent from the
   local daemon authentication token.
+- Owner-only provider-key storage in the user configuration directory when a
+  headless host does not provide an operating-system credential service.
 - Serializable, crash-recoverable cost reservations that prevent concurrent
   runs from overspending a shared budget.
 - Durable WebSocket event replay, explicit resynchronization and bounded
@@ -38,6 +40,12 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   the database rather than substituting the daemon token. The key remains in
   the operating-system credential store, which must be included in the
   operator's profile backup; Oberth does not export it automatically.
+
+## 0.1.0-alpha.7 - 2026-08-14 [withdrawn]
+
+- Withdrawn before GitHub Release publication after the Linux packaged smoke
+  test exposed an unavailable desktop credential service on headless hosts.
+- No assets were published and `main` was not advanced to this tag.
 
 ## 0.1.0-alpha.6 - 2026-08-12
 

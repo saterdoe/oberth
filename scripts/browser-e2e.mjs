@@ -158,10 +158,46 @@ const runJourney = async locale => {
   }
 }
 
+const auditCompactWindows = async () => {
+  state = fixture()
+  const context = await browser.newContext({ viewport: { width: 1024, height: 768 }, locale: 'en-US' })
+  await context.addInitScript(() => {
+    localStorage.setItem('oberth.locale', 'en')
+    localStorage.setItem('oberth.product-tour.v1', 'completed')
+  })
+  const page = await context.newPage()
+  const assertNoGlobalOverflow = async label => {
+    const dimensions = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }))
+    if (dimensions.scroll > dimensions.client) throw new Error(`${label} has global horizontal overflow: ${dimensions.scroll}px > ${dimensions.client}px`)
+  }
+  try {
+    await page.goto(origin)
+    await page.getByRole('heading', { name: 'Home' }).waitFor()
+    await assertNoGlobalOverflow('Home at 1024x768')
+    for (const name of ['Session', 'Vault', 'Routes', 'Costs', 'Settings']) {
+      await page.getByRole('button', { name, exact: true }).click()
+      await assertNoGlobalOverflow(`${name} at 1024x768`)
+    }
+    await page.setViewportSize({ width: 800, height: 600 })
+    await page.getByRole('button', { name: 'Session', exact: true }).click()
+    await assertNoGlobalOverflow('Session at 800x600')
+    if (await page.locator('.side-label').first().isVisible()) throw new Error('Compact navigation did not collapse at 800px')
+    const primary = page.locator('.task-create>button[type="submit"]')
+    await primary.scrollIntoViewIfNeeded()
+    if (!await primary.isVisible()) throw new Error('Primary task action is not visible in a compact window')
+  } catch (error) {
+    await page.screenshot({ path: artifactPath('compact-window-failure.png'), fullPage: true })
+    throw error
+  } finally {
+    await context.close()
+  }
+}
+
 try {
   await runJourney('en')
   await runJourney('es')
-  console.log('Browser E2E passed: startup, task execution, recovery, review, export and decision in English and Spanish.')
+  await auditCompactWindows()
+  console.log('Browser E2E passed: bilingual journeys and compact-window layout at 1024x768 and 800x600.')
 } finally {
   await browser.close()
   await new Promise(resolve => server.close(resolve))

@@ -36,6 +36,13 @@ recent 1,000 events per connection, and never persists streamed `task.chunk`
 content or free-form task summaries. Durable run evidence remains in the
 versioned run-event store.
 
+Provider-secret keys use the operating-system credential store when available.
+On headless systems without a credential service, Oberth stores the key at
+`$XDG_CONFIG_HOME/oberth/provider-secret-key-v1` (or the platform-equivalent
+user configuration directory) with owner-only permissions. Back up that entry
+or file together with the database; losing it makes encrypted provider
+credentials intentionally unrecoverable.
+
 Unknown or malformed versions fail closed. A failed migration must leave the
 source path unchanged, must not overwrite an existing recovery backup with
 different bytes, and must return an actionable error.

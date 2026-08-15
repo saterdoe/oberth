@@ -92,15 +92,21 @@ func NewHub(pools ...*pgxpool.Pool) *Hub {
 		h.pool = pools[0]
 	}
 	if h.pool != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if _, err := h.pool.Exec(ctx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention)); err != nil {
+		maxCtx, cancelMax := context.WithTimeout(context.Background(), 2*time.Second)
+		var latest uint64
+		err := h.pool.QueryRow(maxCtx, `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest)
+		cancelMax()
+		if err != nil {
+			slog.Error("failed to initialize durable websocket sequence; continuing without durable replay", "error", err)
+			h.pool = nil
+			return h
+		}
+		h.sequence.Store(latest)
+		pruneCtx, cancelPrune := context.WithTimeout(context.Background(), 2*time.Second)
+		if _, err := h.pool.Exec(pruneCtx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention)); err != nil {
 			slog.Warn("failed to prune expired websocket events at startup", "error", err)
 		}
-		var latest uint64
-		if h.pool.QueryRow(ctx, `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest) == nil {
-			h.sequence.Store(latest)
-		}
+		cancelPrune()
 	}
 	return h
 }
@@ -161,11 +167,22 @@ func (h *Hub) persist(evt Event) uint64 {
 	return seq
 }
 
-func trimReplayWindow(events []Event) ([]Event, bool) {
-	if len(events) <= maxReplayEvents {
-		return events, false
+func trimReplayWindow(events []Event, after, through uint64) ([]Event, bool) {
+	gap := len(events) == 0 && through > after
+	previous := after
+	for _, event := range events {
+		if event.Sequence != previous+1 {
+			gap = true
+		}
+		previous = event.Sequence
 	}
-	return events[len(events)-maxReplayEvents:], true
+	if len(events) > 0 && events[len(events)-1].Sequence != through {
+		gap = true
+	}
+	if len(events) > maxReplayEvents {
+		return events[len(events)-maxReplayEvents:], true
+	}
+	return events, gap
 }
 
 func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, bool, error) {
@@ -192,7 +209,7 @@ func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, bool,
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
-	events, truncated := trimReplayWindow(events)
+	events, truncated := trimReplayWindow(events, after, through)
 	return events, truncated, nil
 }
 

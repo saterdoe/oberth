@@ -175,11 +175,41 @@ func TestTrimReplayWindowSignalsGapAndKeepsNewestEvents(t *testing.T) {
 	for i := range events {
 		events[i].Sequence = uint64(i + 1)
 	}
-	trimmed, truncated := trimReplayWindow(events)
+	trimmed, truncated := trimReplayWindow(events, 0, uint64(len(events)))
 	if !truncated || len(trimmed) != maxReplayEvents {
 		t.Fatalf("expected bounded replay with explicit truncation, got length=%d truncated=%v", len(trimmed), truncated)
 	}
 	if trimmed[0].Sequence != 6 || trimmed[len(trimmed)-1].Sequence != uint64(len(events)) {
 		t.Fatalf("expected newest replay window, got %d..%d", trimmed[0].Sequence, trimmed[len(trimmed)-1].Sequence)
+	}
+}
+
+func TestTrimReplayWindowSignalsRetentionAndPersistenceGaps(t *testing.T) {
+	tests := []struct {
+		name    string
+		events  []Event
+		after   uint64
+		through uint64
+	}{
+		{name: "retention removed prefix", events: []Event{{Sequence: 51}, {Sequence: 52}}, after: 1, through: 52},
+		{name: "all requested events expired", events: nil, after: 1, through: 52},
+		{name: "persistence gap in window", events: []Event{{Sequence: 2}, {Sequence: 4}}, after: 1, through: 4},
+		{name: "missing durable tail", events: []Event{{Sequence: 2}}, after: 1, through: 3},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, truncated := trimReplayWindow(test.events, test.after, test.through)
+			if !truncated {
+				t.Fatal("replay gap must require explicit resynchronization")
+			}
+		})
+	}
+}
+
+func TestTrimReplayWindowKeepsContiguousReplay(t *testing.T) {
+	events := []Event{{Sequence: 8}, {Sequence: 9}, {Sequence: 10}}
+	trimmed, truncated := trimReplayWindow(events, 7, 10)
+	if truncated || len(trimmed) != 3 {
+		t.Fatalf("contiguous replay should not require resync: length=%d truncated=%v", len(trimmed), truncated)
 	}
 }

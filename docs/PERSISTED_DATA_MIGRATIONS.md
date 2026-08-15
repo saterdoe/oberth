@@ -9,7 +9,7 @@ downgrade those formats.
 | Format | Owner | Current version | Storage | Compatibility and recovery |
 | --- | --- | --- | --- | --- |
 | Configuration | `internal/config` | 1 | `.oberth.yaml` and environment overrides | New keys are additive. Incompatible changes require a preserved pre-migration file and documented manual recovery. |
-| Database | `internal/db` | 24 | PostgreSQL plus `schema_migrations` | Forward-only in production. Back up before upgrading; down migrations are for development, not data recovery. |
+| Database | `internal/db` | 28 | PostgreSQL plus `schema_migrations` | Forward-only in production. Create and verify a backup before upgrading; down migrations are for development, not data recovery. |
 | Task and run state | `internal/api` | 1 | `tasks`, `sessions`, `task_runs` | Unknown versions fail closed and remain recoverable; they are never coerced into a terminal state. |
 | Run events | `internal/api` | 1 | append-only `run_events` | Existing events are immutable. Recovery appends correlated evidence instead of rewriting history. |
 | Result bundle | `internal/api` | 1 | `task_runs.result_bundle` and exports | Additive v1 fields are accepted. Incompatible versions require an explicit migration and byte-identical backup. |
@@ -25,6 +25,15 @@ tests fail when an owner, version, storage location, or rollback policy is absen
 4. Produce and validate the complete target document before atomic replacement.
 5. Run the release verification suite and retain migration evidence.
 6. Record breaking format changes and recovery commands in `CHANGELOG.md`.
+
+PostgreSQL migrations are applied at startup but database backups are not
+automatic. Operators must create and verify a backup before launching a newer
+Oberth version against existing data.
+
+WebSocket delivery metadata in `durable_events` is a bounded reconnect cache,
+not a permanent audit log. It retains at most 24 hours, replays at most the most
+recent 1,000 events per connection, and never persists streamed `task.chunk`
+content. Durable run evidence remains in the versioned run-event store.
 
 Unknown or malformed versions fail closed. A failed migration must leave the
 source path unchanged, must not overwrite an existing recovery backup with

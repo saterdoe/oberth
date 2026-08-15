@@ -880,6 +880,7 @@ a legitimate outcome and does not require a verification command.
 		MaxDuration:         30 * time.Minute,
 		Model: func(modelCtx context.Context, messages []agentruntime.Message) (agentruntime.ModelResponse, error) {
 			var reservation *cost.Reservation
+			reservationCommitted := false
 			if s.costTracker != nil {
 				status, budgetErr := s.costTracker.CheckBudget(modelCtx, providerID)
 				if budgetErr != nil {
@@ -900,7 +901,11 @@ a legitimate outcome and does not require a verification command.
 				if budgetErr != nil {
 					return agentruntime.ModelResponse{}, budgetErr
 				}
-				defer s.costTracker.Release(context.WithoutCancel(modelCtx), reservation)
+				defer func() {
+					if !reservationCommitted {
+						s.costTracker.Release(context.WithoutCancel(modelCtx), reservation)
+					}
+				}()
 			}
 			llmMessages := make([]llm.Message, 0, len(messages))
 			for _, message := range messages {
@@ -971,6 +976,10 @@ a legitimate outcome and does not require a verification command.
 				})
 				if recordErr != nil {
 					runWarnings = append(runWarnings, "cost accounting: "+recordErr.Error())
+				} else if commitErr := s.costTracker.Commit(context.WithoutCancel(modelCtx), reservation); commitErr != nil {
+					runWarnings = append(runWarnings, "cost reservation commit: "+commitErr.Error())
+				} else {
+					reservationCommitted = true
 				}
 				session.Cost += inputCost + outputCost
 			}

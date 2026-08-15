@@ -32,10 +32,12 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 - Database migrations 27 and 28 add durable cost reservations and replayable
   event streams. They are additive and run through the existing transactional
-  migration path; preserve the automatic pre-migration backup before rollback.
+  migration path; create and verify a database backup before upgrading.
 - Existing provider secrets remain readable while the dedicated key is created
   and persisted. Recovery must restore the provider-secret key together with
-  the database rather than substituting the daemon token.
+  the database rather than substituting the daemon token. The key remains in
+  the operating-system credential store, which must be included in the
+  operator's profile backup; Oberth does not export it automatically.
 
 ## 0.1.0-alpha.6 - 2026-08-12
 

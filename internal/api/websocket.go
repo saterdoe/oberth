@@ -37,6 +37,11 @@ const (
 	EventResyncRequired  EventType = "stream.resync_required"
 )
 
+const (
+	maxReplayEvents       = 1000
+	durableEventRetention = 24 * time.Hour
+)
+
 type Event struct {
 	Version     string    `json:"version"`
 	ID          string    `json:"id"`
@@ -58,6 +63,13 @@ type Hub struct {
 	sequence  atomic.Uint64
 	pool      *pgxpool.Pool
 	persistMu sync.Mutex
+}
+
+func durableEventPayload(evt Event) any {
+	if evt.Type == EventTaskChunk {
+		return map[string]any{"redacted": true, "reason": "ephemeral_stream_content"}
+	}
+	return evt.Payload
 }
 
 func NewHub(pools ...*pgxpool.Pool) *Hub {
@@ -113,22 +125,22 @@ func (h *Hub) Broadcast(evt Event) {
 func (h *Hub) persist(evt Event) uint64 {
 	h.persistMu.Lock()
 	defer h.persistMu.Unlock()
+	seq := h.sequence.Add(1)
 	if h.pool == nil {
-		return h.sequence.Add(1)
+		return seq
 	}
-	payload, err := json.Marshal(evt.Payload)
+	payload, err := json.Marshal(durableEventPayload(evt))
 	if err != nil {
-		return h.sequence.Add(1)
+		return seq
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	var seq uint64
-	err = h.pool.QueryRow(ctx, `INSERT INTO durable_events(event_id,version,event_type,aggregate_id,payload,created_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING sequence`, evt.ID, evt.Version, string(evt.Type), evt.AggregateID, payload, evt.Time).Scan(&seq)
+	_, _ = h.pool.Exec(ctx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention))
+	err = h.pool.QueryRow(ctx, `INSERT INTO durable_events(sequence,event_id,version,event_type,aggregate_id,payload,created_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING sequence`, seq, evt.ID, evt.Version, string(evt.Type), evt.AggregateID, payload, evt.Time).Scan(&seq)
 	if err != nil {
 		slog.Error("failed to persist websocket event", "error", err)
-		return h.sequence.Add(1)
+		return seq
 	}
-	h.sequence.Store(seq)
 	return seq
 }
 
@@ -136,7 +148,7 @@ func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, error
 	if h.pool == nil || through <= after {
 		return nil, nil
 	}
-	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence`, after, through)
+	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 ORDER BY sequence DESC LIMIT $3) recent ORDER BY sequence`, after, through, maxReplayEvents)
 	if err != nil {
 		return nil, err
 	}

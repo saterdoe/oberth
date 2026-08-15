@@ -134,3 +134,27 @@ func TestHubAddsVersionedOrderedEventEnvelope(t *testing.T) {
 		t.Fatal("aggregate ID was not preserved")
 	}
 }
+
+func TestDurablePayloadRedactsStreamContent(t *testing.T) {
+	payload := durableEventPayload(Event{Type: EventTaskChunk, Payload: map[string]any{"content": "private source"}})
+	redacted, ok := payload.(map[string]any)
+	if !ok || redacted["redacted"] != true {
+		t.Fatalf("task chunks must be redacted before persistence: %#v", payload)
+	}
+	if _, leaked := redacted["content"]; leaked {
+		t.Fatal("durable task chunk payload leaked streamed content")
+	}
+}
+
+func TestProviderModelsEgressPolicyOnlyAllowsExplicitLocalTypes(t *testing.T) {
+	for _, providerType := range []string{"openai", "anthropic", "google"} {
+		if providerModelsEgressPolicy(providerType).AllowLoopback {
+			t.Fatalf("%s must not allow loopback model discovery", providerType)
+		}
+	}
+	for _, providerType := range []string{"ollama", "custom"} {
+		if !providerModelsEgressPolicy(providerType).AllowLoopback {
+			t.Fatalf("%s must allow explicitly configured local model discovery", providerType)
+		}
+	}
+}

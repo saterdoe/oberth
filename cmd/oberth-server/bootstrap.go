@@ -148,8 +148,8 @@ func run() {
 			}
 			decrypted, err := providerWithOpenSecret(cfg.Auth.ProviderSecretKey, p)
 			if err != nil {
-				slog.Warn("failed to decrypt llm provider credential", "name", p.Name, "type", p.ProviderType, "error", err)
-				continue
+				slog.Error("provider credential recovery key is unavailable; restore the OS credential-store entry that belongs with this database", "name", p.Name, "type", p.ProviderType, "error", err)
+				os.Exit(1)
 			}
 			provider, err := gateway.BuildProvider(decrypted)
 			if err != nil {

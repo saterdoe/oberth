@@ -38,7 +38,9 @@ func ValidateProviderURL(raw string, policy EgressPolicy) error {
 	return nil
 }
 
-func newEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {
+// NewEgressClient returns an HTTP client that revalidates DNS destinations at
+// connect time and applies the same policy to every redirect.
+func NewEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
 		Proxy: nil,
@@ -68,6 +70,10 @@ func newEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {
 		}
 		return ValidateProviderURL(req.URL.String(), policy)
 	}}
+}
+
+func newEgressClient(timeout time.Duration, policy EgressPolicy) *http.Client {
+	return NewEgressClient(timeout, policy)
 }
 
 func deniedProviderIP(ip net.IP, allowLoopback bool) bool {

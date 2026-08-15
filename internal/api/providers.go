@@ -257,6 +257,10 @@ func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/v1/providers/{id}/fetch-models
 // Calls the provider's /v1/models endpoint (OpenAI-compatible) and returns available model IDs.
+func providerModelsEgressPolicy(providerType string) llm.EgressPolicy {
+	return llm.EgressPolicy{AllowLoopback: providerType == "ollama" || providerType == "custom"}
+}
+
 func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -290,7 +294,12 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 	modelsURL += "/models"
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	policy := providerModelsEgressPolicy(p.ProviderType)
+	if err := llm.ValidateProviderURL(modelsURL, policy); err != nil {
+		respondError(w, http.StatusBadRequest, "PROVIDER_DESTINATION_DENIED", err.Error(), nil)
+		return
+	}
+	client := llm.NewEgressClient(15*time.Second, policy)
 	req, err := http.NewRequestWithContext(r.Context(), "GET", modelsURL, nil)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "REQUEST_ERROR", "failed to create request", nil)
@@ -313,7 +322,7 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		respondError(w, http.StatusBadGateway, "READ_ERROR", "failed to read response", nil)
 		return

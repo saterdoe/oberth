@@ -735,7 +735,7 @@ function SettingsPanel({providers,onChanged}:{providers:Provider[];onChanged:()=
   const [kind,setKind]=useState('ollama'),[name,setName]=useState('Ollama local'),[base,setBase]=useState('http://localhost:11434'),[model,setModel]=useState('qwen2.5-coder:7b'),[key,setKey]=useState(''),[message,setMessage]=useState(''),[checking,setChecking]=useState('')
   const [editingProviderID,setEditingProviderID]=useState('')
   const [localCandidates,setLocalCandidates]=useState<LocalProviderCandidate[]>([]),[discovering,setDiscovering]=useState(false)
-  const discover=async()=>{setDiscovering(true);try{setLocalCandidates(await api<LocalProviderCandidate[]>('/providers/discover-local'))}catch(err){setMessage(err instanceof Error?`No se pudo detectar el entorno local: ${err.message}`:String(err))}finally{setDiscovering(false)}}
+  const discover=async()=>{setDiscovering(true);try{setLocalCandidates(await api<LocalProviderCandidate[]>('/providers/discover-local'))}catch(err){setMessage(t('settings.local.discoveryError',{detail:err instanceof Error?err.message:String(err)}))}finally{setDiscovering(false)}}
   useEffect(()=>{void discover()},[]) // eslint-disable-line react-hooks/exhaustive-deps
   const editProvider=(provider:Provider)=>{setEditingProviderID(provider.id);setKind(provider.provider_type);setName(provider.name);setBase(provider.base_url||'');setModel(provider.default_model||providerModels(provider)[0]||'');setKey('');setMessage('')}
   const resetProviderForm=()=>{setEditingProviderID('');setKind('ollama');setName('Ollama local');setBase('http://localhost:11434');setModel('qwen2.5-coder:7b');setKey('')}

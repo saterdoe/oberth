@@ -63,6 +63,9 @@ func resolveOrCreateFileKey(path string) (string, error) {
 	if err := file.Close(); err != nil {
 		return "", fmt.Errorf("close provider key fallback: %w", err)
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return "", fmt.Errorf("protect provider key fallback: %w", err)
+	}
 	return value, nil
 }
 

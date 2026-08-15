@@ -3,6 +3,7 @@ package providersecret
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestResolveOrCreateFileKeyCreatesAndReusesPrivateKey(t *testing.T) {
 	}
 	if info, err := os.Stat(path); err != nil {
 		t.Fatal(err)
-	} else if info.Mode().Perm()&0o077 != 0 {
+	} else if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("provider key fallback permissions are too broad: %o", info.Mode().Perm())
 	}
 }

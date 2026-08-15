@@ -7,11 +7,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/vault"
@@ -31,6 +33,13 @@ const (
 	EventTaskChunk       EventType = "task.chunk"
 	EventTaskStatus      EventType = "task.status"
 	EventToolEffect      EventType = "tool.effect"
+	EventStreamSnapshot  EventType = "stream.snapshot"
+	EventResyncRequired  EventType = "stream.resync_required"
+)
+
+const (
+	maxReplayEvents       = 1000
+	durableEventRetention = 24 * time.Hour
 )
 
 type Event struct {
@@ -49,15 +58,57 @@ type client struct {
 }
 
 type Hub struct {
-	mu       sync.RWMutex
-	clients  map[*client]bool
-	sequence atomic.Uint64
+	mu        sync.RWMutex
+	clients   map[*client]bool
+	sequence  atomic.Uint64
+	pool      *pgxpool.Pool
+	persistMu sync.Mutex
 }
 
-func NewHub() *Hub {
-	return &Hub{
+func durableEventPayload(evt Event) any {
+	if evt.Type == EventTaskChunk {
+		return map[string]any{"redacted": true, "reason": "ephemeral_stream_content"}
+	}
+	if evt.Type == EventTaskStatus || evt.Type == EventSessionComplete {
+		if payload, ok := evt.Payload.(map[string]any); ok {
+			redacted := make(map[string]any, len(payload))
+			for key, value := range payload {
+				if key != "summary" {
+					redacted[key] = value
+				}
+			}
+			redacted["summary_redacted"] = true
+			return redacted
+		}
+	}
+	return evt.Payload
+}
+
+func NewHub(pools ...*pgxpool.Pool) *Hub {
+	h := &Hub{
 		clients: make(map[*client]bool),
 	}
+	if len(pools) > 0 {
+		h.pool = pools[0]
+	}
+	if h.pool != nil {
+		maxCtx, cancelMax := context.WithTimeout(context.Background(), 2*time.Second)
+		var latest uint64
+		err := h.pool.QueryRow(maxCtx, `SELECT COALESCE(MAX(sequence),0) FROM durable_events`).Scan(&latest)
+		cancelMax()
+		if err != nil {
+			slog.Error("failed to initialize durable websocket sequence; continuing without durable replay", "error", err)
+			h.pool = nil
+			return h
+		}
+		h.sequence.Store(latest)
+		pruneCtx, cancelPrune := context.WithTimeout(context.Background(), 2*time.Second)
+		if _, err := h.pool.Exec(pruneCtx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention)); err != nil {
+			slog.Warn("failed to prune expired websocket events at startup", "error", err)
+		}
+		cancelPrune()
+	}
+	return h
 }
 
 func (h *Hub) Broadcast(evt Event) {
@@ -67,11 +118,11 @@ func (h *Hub) Broadcast(evt Event) {
 	if evt.ID == "" {
 		evt.ID = uuid.NewString()
 	}
-	if evt.Sequence == 0 {
-		evt.Sequence = h.sequence.Add(1)
-	}
 	if evt.Time.IsZero() {
 		evt.Time = time.Now().UTC()
+	}
+	if evt.Sequence == 0 {
+		evt.Sequence = h.persist(evt)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -80,9 +131,86 @@ func (h *Hub) Broadcast(evt Event) {
 		select {
 		case cl.ch <- evt:
 		default:
-			slog.Warn("websocket client too slow, dropping event", "type", evt.Type)
+			select {
+			case <-cl.ch:
+			default:
+			}
+			resync := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: evt.Sequence, Type: EventResyncRequired, Payload: map[string]any{"reason": "slow_consumer", "latest_sequence": evt.Sequence}, Time: time.Now().UTC()}
+			select {
+			case cl.ch <- resync:
+			default:
+			}
+			slog.Warn("websocket client requires resync", "type", evt.Type)
 		}
 	}
+}
+
+func (h *Hub) persist(evt Event) uint64 {
+	h.persistMu.Lock()
+	defer h.persistMu.Unlock()
+	seq := h.sequence.Add(1)
+	if h.pool == nil {
+		return seq
+	}
+	payload, err := json.Marshal(durableEventPayload(evt))
+	if err != nil {
+		return seq
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, _ = h.pool.Exec(ctx, `DELETE FROM durable_events WHERE created_at < $1`, time.Now().UTC().Add(-durableEventRetention))
+	err = h.pool.QueryRow(ctx, `INSERT INTO durable_events(sequence,event_id,version,event_type,aggregate_id,payload,created_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING sequence`, seq, evt.ID, evt.Version, string(evt.Type), evt.AggregateID, payload, evt.Time).Scan(&seq)
+	if err != nil {
+		slog.Error("failed to persist websocket event", "error", err)
+		return seq
+	}
+	return seq
+}
+
+func trimReplayWindow(events []Event, after, through uint64) ([]Event, bool) {
+	gap := len(events) == 0 && through > after
+	previous := after
+	for _, event := range events {
+		if event.Sequence != previous+1 {
+			gap = true
+		}
+		previous = event.Sequence
+	}
+	if len(events) > 0 && events[len(events)-1].Sequence != through {
+		gap = true
+	}
+	if len(events) > maxReplayEvents {
+		return events[len(events)-maxReplayEvents:], true
+	}
+	return events, gap
+}
+
+func (h *Hub) replay(ctx context.Context, after, through uint64) ([]Event, bool, error) {
+	if h.pool == nil || through <= after {
+		return nil, false, nil
+	}
+	rows, err := h.pool.Query(ctx, `SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM (SELECT sequence,event_id,version,event_type,aggregate_id,payload,created_at FROM durable_events WHERE sequence>$1 AND sequence<=$2 AND created_at >= $3 ORDER BY sequence DESC LIMIT $4) recent ORDER BY sequence`, after, through, time.Now().UTC().Add(-durableEventRetention), maxReplayEvents+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	var events []Event
+	for rows.Next() {
+		var e Event
+		var payload []byte
+		if err := rows.Scan(&e.Sequence, &e.ID, &e.Version, &e.Type, &e.AggregateID, &payload, &e.Time); err != nil {
+			return nil, false, err
+		}
+		if err := json.Unmarshal(payload, &e.Payload); err != nil {
+			return nil, false, err
+		}
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	events, truncated := trimReplayWindow(events, after, through)
+	return events, truncated, nil
 }
 
 func (h *Hub) register(ctx context.Context) *client {
@@ -135,6 +263,11 @@ func (s *Server) broadcastTaskChunk(taskID, sessionID uuid.UUID, content string)
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	cursor, err := strconv.ParseUint(r.URL.Query().Get("cursor"), 10, 64)
+	if r.URL.Query().Get("cursor") != "" && err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_CURSOR", "cursor must be an unsigned sequence", nil)
+		return
+	}
 	subprotocols := []string{}
 	if authProtocol := websocketAuthProtocol(r.Header.Get("Sec-WebSocket-Protocol")); authProtocol != "" {
 		subprotocols = append(subprotocols, authProtocol)
@@ -153,6 +286,31 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	cl := s.eventHub.register(ctx)
 	defer s.eventHub.unregister(cl)
+	snapshotSequence := s.eventHub.sequence.Load()
+	replay, truncated, replayErr := s.eventHub.replay(ctx, cursor, snapshotSequence)
+	if replayErr != nil {
+		c.Close(websocket.StatusInternalError, "event replay unavailable")
+		return
+	}
+	snapshot := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventStreamSnapshot, Payload: map[string]any{"cursor": snapshotSequence, "replayed": len(replay), "truncated": truncated}, Time: time.Now().UTC()}
+	if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
+		if writeErr := c.Write(ctx, websocket.MessageText, data); writeErr != nil {
+			return
+		}
+	}
+	if truncated {
+		resync := Event{Version: CurrentEventVersion, ID: uuid.NewString(), Sequence: snapshotSequence, Type: EventResyncRequired, Payload: map[string]any{"reason": "replay_window_exceeded", "latest_sequence": snapshotSequence}, Time: time.Now().UTC()}
+		data, _ := json.Marshal(resync)
+		if err := c.Write(ctx, websocket.MessageText, data); err != nil {
+			return
+		}
+	}
+	for _, event := range replay {
+		data, _ := json.Marshal(event)
+		if err := c.Write(ctx, websocket.MessageText, data); err != nil {
+			return
+		}
+	}
 
 	go func() {
 		defer cancel()
@@ -173,6 +331,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		case evt, ok := <-cl.ch:
 			if !ok {
 				return
+			}
+			if evt.Type != EventResyncRequired && evt.Sequence <= snapshotSequence {
+				continue
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {

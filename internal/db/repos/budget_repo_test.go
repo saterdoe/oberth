@@ -38,6 +38,39 @@ func TestBudgetRepo_CreateAndGetByID(t *testing.T) {
 	assert.InDelta(t, 100.00, got.SoftLimit, 0.01)
 }
 
+func TestBudgetReservationsEnforceLimitAndAreIdempotent(t *testing.T) {
+	pool := setupTestPool(t)
+	repo := NewBudgetRepo(pool)
+	ctx := context.Background()
+	b := &Budget{Name: "reservation-" + uuid.NewString()[:8], HardLimit: 10, Period: "monthly", PeriodStart: time.Now(), IsActive: true}
+	require.NoError(t, repo.Create(ctx, b))
+	first, err := repo.Reserve(ctx, nil, 7, time.Minute)
+	require.NoError(t, err)
+	_, err = repo.Reserve(ctx, nil, 4, time.Minute)
+	assert.ErrorIs(t, err, ErrBudgetReservationExceeded)
+	require.NoError(t, repo.SetReservationState(ctx, first.ID, "released"))
+	require.NoError(t, repo.SetReservationState(ctx, first.ID, "released"))
+	_, err = repo.Reserve(ctx, nil, 4, time.Minute)
+	require.NoError(t, err)
+}
+
+func TestBudgetReservationsReconcileExpiry(t *testing.T) {
+	pool := setupTestPool(t)
+	repo := NewBudgetRepo(pool)
+	ctx := context.Background()
+	b := &Budget{Name: "expiry-" + uuid.NewString()[:8], HardLimit: 10, Period: "monthly", PeriodStart: time.Now(), IsActive: true}
+	require.NoError(t, repo.Create(ctx, b))
+	reservation, err := repo.Reserve(ctx, nil, 8, time.Nanosecond)
+	require.NoError(t, err)
+	time.Sleep(time.Millisecond)
+	count, err := repo.ReconcileExpiredReservations(ctx)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, int64(1))
+	require.NoError(t, repo.SetReservationState(ctx, reservation.ID, "released"))
+	_, err = repo.Reserve(ctx, nil, 8, time.Minute)
+	require.NoError(t, err)
+}
+
 func TestBudgetRepo_GetByID_NotFound(t *testing.T) {
 	pool := setupTestPool(t)
 	repo := NewBudgetRepo(pool)

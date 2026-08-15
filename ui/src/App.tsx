@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   BookOpen, Check, Coins, FileText, Folder, LayoutDashboard, LoaderCircle,
-  Route, Search, Settings, SquareTerminal, X,
+  CircleHelp, Route, Search, Settings, SquareTerminal, X,
 } from 'lucide-react'
 import ProductTour,{TourTarget} from './ProductTour'
 import Modal from './Modal'
@@ -97,6 +97,7 @@ export default function App() {
   const [taskToOpen,setTaskToOpen] = useState('')
   const [loadFailures,setLoadFailures] = useState(0)
   const [hasLoaded,setHasLoaded] = useState(false)
+  const [shortcutsOpen,setShortcutsOpen] = useState(false)
 
   const load=async()=>{
       const result=await Promise.allSettled([
@@ -148,14 +149,32 @@ export default function App() {
   const activeSession=sessions.find(s=>!['completed','approved'].includes(s.status))||sessions[0]
   const project=activeSession?.repo_path?.split(/[\\/]/).filter(Boolean).pop()||'local-workspace'
   const navigate=(next:Tab)=>{if(window.location.hash)window.history.replaceState(null,'',window.location.pathname+window.location.search);setTab(next)}
+  useEffect(()=>{
+    const onKeyDown=(event:KeyboardEvent)=>{
+      const target=event.target
+      const editing=target instanceof HTMLElement&&(target.matches('input,textarea,select,[contenteditable="true"]')||target.isContentEditable)
+      if(editing)return
+      if(event.key==='?'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();setShortcutsOpen(true);return}
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+        event.preventDefault();navigate('sess')
+        window.requestAnimationFrame(()=>document.querySelector<HTMLElement>('.intention-field textarea')?.focus())
+        return
+      }
+      if(event.altKey&&!event.ctrlKey&&!event.metaKey&&/^[1-6]$/.test(event.key)){
+        event.preventDefault();navigate(tabs[Number(event.key)-1].id)
+      }
+    }
+    document.addEventListener('keydown',onKeyDown)
+    return()=>document.removeEventListener('keydown',onKeyDown)
+  },[]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div className="desktop-shell">
     <div className="titlebar"><img className="brand-mark" src="/oberth-wordmark.svg" alt="Oberth"/><span className="tsep">/</span><span className="tproj">{project}</span>{status.server?.version&&<span className="tver">v{status.server.version}</span>}</div>
     {loadFailures>0&&<div className="global-warning" role="alert">{t('load.partial',{count:loadFailures})}<button onClick={()=>void load()}>{t('common.retry')}</button></div>}
     <div className="main-frame">
       <aside className="sidebar" aria-label={t('nav.main')}>
-        {tabs.map(({id,label,Icon},index)=><div key={id} className={`${index===3?'with-separator ':''}side-wrap`}><button className={`side-icon ${tab===id?'active':''}`} onClick={()=>navigate(id)} aria-label={t(label)} aria-current={tab===id?'page':undefined}><Icon size={15}/><span className="side-label">{t(label)}</span></button></div>)}
-        <div className="side-bottom"><div className="side-separator"/><ProductTour onNavigate={(target:TourTarget)=>navigate(target as Tab)}/></div>
+        {tabs.map(({id,label,Icon},index)=><div key={id} className={`${index===3?'with-separator ':''}side-wrap`}><button className={`side-icon ${tab===id?'active':''}`} onClick={()=>navigate(id)} aria-label={t(label)} aria-keyshortcuts={`Alt+${index+1}`} aria-current={tab===id?'page':undefined}><Icon size={15}/><span className="side-label">{t(label)}</span></button></div>)}
+        <div className="side-bottom"><div className="side-separator"/><button type="button" className="side-icon" aria-label={t('shortcuts.open')} aria-keyshortcuts="?" onClick={()=>setShortcutsOpen(true)}><CircleHelp size={15}/><span className="side-label">{t('shortcuts.help')}</span></button><ProductTour onNavigate={(target:TourTarget)=>navigate(target as Tab)}/></div>
       </aside>
       <div className="content-frame">
         {tab==='dash'&&<DashboardAdmin status={status} loaded={hasLoaded} providers={providers} costs={costs} session={activeSession} sessions={sessions} tasks={tasks} onNewTask={()=>setTab('sess')} onOpenTask={id=>{setTaskToOpen(id);setTab('sess')}}/>}
@@ -167,6 +186,7 @@ export default function App() {
       </div>
     </div>
     <StatusBar connected={connected} status={status} providers={providers}/>
+    <Modal open={shortcutsOpen} label={t('shortcuts.title')} onClose={()=>setShortcutsOpen(false)} backdropClassName="shortcuts-backdrop" dialogClassName="shortcuts-dialog"><header><strong>{t('shortcuts.title')}</strong><button type="button" aria-label={t('shortcuts.close')} onClick={()=>setShortcutsOpen(false)}>×</button></header><p>{t('shortcuts.description')}</p><dl><div><dt><kbd>Alt</kbd> + <kbd>1–6</kbd></dt><dd>{t('shortcuts.navigate')}</dd></div><div><dt><kbd>Ctrl/⌘</kbd> + <kbd>K</kbd></dt><dd>{t('shortcuts.compose')}</dd></div><div><dt><kbd>?</kbd></dt><dd>{t('shortcuts.show')}</dd></div><div><dt><kbd>Esc</kbd></dt><dd>{t('shortcuts.dismiss')}</dd></div></dl></Modal>
   </div>
 }
 
@@ -715,7 +735,7 @@ function SettingsPanel({providers,onChanged}:{providers:Provider[];onChanged:()=
   const [kind,setKind]=useState('ollama'),[name,setName]=useState('Ollama local'),[base,setBase]=useState('http://localhost:11434'),[model,setModel]=useState('qwen2.5-coder:7b'),[key,setKey]=useState(''),[message,setMessage]=useState(''),[checking,setChecking]=useState('')
   const [editingProviderID,setEditingProviderID]=useState('')
   const [localCandidates,setLocalCandidates]=useState<LocalProviderCandidate[]>([]),[discovering,setDiscovering]=useState(false)
-  const discover=async()=>{setDiscovering(true);try{setLocalCandidates(await api<LocalProviderCandidate[]>('/providers/discover-local'))}catch(err){setMessage(err instanceof Error?`No se pudo detectar el entorno local: ${err.message}`:String(err))}finally{setDiscovering(false)}}
+  const discover=async()=>{setDiscovering(true);try{setLocalCandidates(await api<LocalProviderCandidate[]>('/providers/discover-local'))}catch(err){setMessage(t('settings.local.discoveryError',{detail:err instanceof Error?err.message:String(err)}))}finally{setDiscovering(false)}}
   useEffect(()=>{void discover()},[]) // eslint-disable-line react-hooks/exhaustive-deps
   const editProvider=(provider:Provider)=>{setEditingProviderID(provider.id);setKind(provider.provider_type);setName(provider.name);setBase(provider.base_url||'');setModel(provider.default_model||providerModels(provider)[0]||'');setKey('');setMessage('')}
   const resetProviderForm=()=>{setEditingProviderID('');setKind('ollama');setName('Ollama local');setBase('http://localhost:11434');setModel('qwen2.5-coder:7b');setKey('')}

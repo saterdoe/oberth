@@ -50,6 +50,18 @@
   .vault-tree button span{display:none}
   .vault-list{width:240px}
   .statusbar>span:nth-child(3){display:none}
+  .session-body{min-width:0}
+  .session-context{width:168px}
+  .route-row,.route-columns{grid-template-columns:26px minmax(0,1fr) minmax(150px,28%)}
+  .provider-row{flex-wrap:wrap}
+  .provider-name{min-width:140px}
+}
+@media(max-width:820px){
+  .session-body{display:block;overflow-y:auto}
+  .session-left{min-height:320px;overflow:visible}
+  .session-context{width:100%;border-left:0;border-top:1px solid var(--b0);overflow:visible}
+  .route-row,.route-columns{grid-template-columns:26px minmax(0,1fr)}
+  .route-action,.route-columns span:last-child{display:none}
 }
 @media(max-width:620px){
   .vault-preview{display:none}

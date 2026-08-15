@@ -18,14 +18,44 @@ func BuildProvider(p repos.Provider) (llm.Provider, error) {
 
 	switch providerType {
 	case "openai":
-		return llm.NewOpenAI(normalizeOpenAIBaseURL(baseURL), providerAPIKey(p)), nil
-	case "google", "custom", "vllm", "tgi":
+		resolved := normalizeOpenAIBaseURL(baseURL)
+		if resolved == "" {
+			resolved = "https://api.openai.com/v1"
+		}
+		if err := llm.ValidateProviderURL(resolved, llm.EgressPolicy{}); err != nil {
+			return nil, err
+		}
+		return llm.NewRestrictedOpenAI(resolved, providerAPIKey(p)), nil
+	case "google":
 		if baseURL == "" {
 			return nil, fmt.Errorf("provider type %q requires base_url", p.ProviderType)
 		}
-		return llm.NewOpenAI(normalizeOpenAIBaseURL(baseURL), providerAPIKey(p)), nil
+		resolved := normalizeOpenAIBaseURL(baseURL)
+		if err := llm.ValidateProviderURL(resolved, llm.EgressPolicy{}); err != nil {
+			return nil, err
+		}
+		return llm.NewRestrictedOpenAI(resolved, providerAPIKey(p)), nil
+	case "custom", "vllm", "tgi":
+		if baseURL == "" {
+			return nil, fmt.Errorf("provider type %q requires base_url", p.ProviderType)
+		}
+		resolved := normalizeOpenAIBaseURL(baseURL)
+		// These provider types are the explicit local-network exception. Private
+		// subnets remain denied; only loopback is permitted.
+		policy := llm.EgressPolicy{AllowLoopback: true}
+		if err := llm.ValidateProviderURL(resolved, policy); err != nil {
+			return nil, err
+		}
+		return llm.NewOpenAI(resolved, providerAPIKey(p)), nil
 	case "ollama":
-		return llm.NewOllama(normalizeOpenAIBaseURL(baseURL)), nil
+		resolved := normalizeOpenAIBaseURL(baseURL)
+		if resolved == "" {
+			resolved = "http://localhost:11434/v1"
+		}
+		if err := llm.ValidateProviderURL(resolved, llm.EgressPolicy{AllowLoopback: true}); err != nil {
+			return nil, err
+		}
+		return llm.NewOllama(resolved), nil
 	case "anthropic":
 		return llm.NewAnthropic(providerAPIKey(p)), nil
 	default:

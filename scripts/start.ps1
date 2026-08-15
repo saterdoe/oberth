@@ -22,7 +22,7 @@ function Stop-ManagedProcess([string]$PidFile, [string]$Name, [switch]$GracefulA
         if ($GracefulAPI) {
             try {
                 $token = (Get-Content -LiteralPath (Join-Path $root "data\local-token") -Raw).Trim()
-                Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:9090/api/v1/system/shutdown" -Headers @{ Authorization = "Bearer $token" } -TimeoutSec 3 | Out-Null
+                Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:9090/api/v1/system/shutdown" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body "{}" -TimeoutSec 3 | Out-Null
                 $process.WaitForExit(60000) | Out-Null
             } catch {
                 Write-Warning "Graceful API shutdown failed; using process-tree fallback."

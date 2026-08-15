@@ -84,6 +84,25 @@ describe('task workspace', () => {
     expect(screen.getByRole('button', { name: 'Session' })).toHaveAttribute('aria-current', 'page')
   })
 
+  it('supports discoverable workspace shortcuts without hijacking editors', async () => {
+    render(<App />)
+    await screen.findByRole('button',{name:'Dashboard'})
+
+    fireEvent.keyDown(document,{key:'?',shiftKey:true})
+    expect(screen.getByRole('dialog',{name:'Keyboard shortcuts'})).toBeInTheDocument()
+    fireEvent.keyDown(document,{key:'Escape'})
+    expect(screen.queryByRole('dialog',{name:'Keyboard shortcuts'})).not.toBeInTheDocument()
+
+    fireEvent.keyDown(document,{key:'2',altKey:true})
+    expect(screen.getByRole('button',{name:'Session'})).toHaveAttribute('aria-current','page')
+    const intention=await screen.findByRole('textbox',{name:/Qué querés lograr/})
+    fireEvent.keyDown(intention,{key:'1',altKey:true})
+    expect(screen.getByRole('button',{name:'Session'})).toHaveAttribute('aria-current','page')
+
+    fireEvent.keyDown(document,{key:'k',ctrlKey:true})
+    await waitFor(()=>expect(intention).toHaveFocus())
+  })
+
   it('loads recent tasks in descending activity order without rendering the full list initially', async () => {
     const base=Date.now()
     taskFixtures=Array.from({length:14},(_,index)=>({

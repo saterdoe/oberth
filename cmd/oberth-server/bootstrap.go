@@ -36,6 +36,12 @@ func run() {
 		os.Exit(1)
 	}
 	configureLogger(cfg.Server.LogLevel)
+	providerKey, err := providersecret.ResolveOrCreateKey()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	cfg.Auth.ProviderSecretKey = providerKey
 
 	slog.Info("starting oberth server",
 		"host", cfg.Server.Host,
@@ -89,6 +95,11 @@ func run() {
 	sessionRepo := repos.NewSessionRepo(pool)
 	costLogRepo := repos.NewCostLogRepo(pool)
 	budgetRepo := repos.NewBudgetRepo(pool)
+	if expired, reconcileErr := budgetRepo.ReconcileExpiredReservations(ctx); reconcileErr != nil {
+		slog.Warn("failed to reconcile expired cost reservations", "error", reconcileErr)
+	} else if expired > 0 {
+		slog.Info("reconciled expired cost reservations", "count", expired)
+	}
 	auditRepo := repos.NewAuditRepo(pool)
 	executionRepo := repos.NewExecutionLogRepo(pool)
 	approvalGateRepo := repos.NewApprovalGateRepo(pool)
@@ -115,7 +126,15 @@ func run() {
 				continue
 			}
 			if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" && !providersecret.IsSealed(*p.APIKeyEncrypted) {
-				sealed, sealErr := providersecret.Seal(cfg.Auth.Token, *p.APIKeyEncrypted)
+				plaintext := *p.APIKeyEncrypted
+				if providersecret.IsLegacy(plaintext) {
+					plaintext, err = providersecret.OpenLegacy(cfg.Auth.Token, plaintext)
+					if err != nil {
+						slog.Warn("failed to migrate legacy provider credential", "name", p.Name, "error", err)
+						continue
+					}
+				}
+				sealed, sealErr := providersecret.Seal(cfg.Auth.ProviderSecretKey, plaintext)
 				if sealErr != nil {
 					slog.Warn("failed to protect legacy provider credential", "name", p.Name, "error", sealErr)
 					continue
@@ -127,10 +146,10 @@ func run() {
 				}
 				slog.Info("protected legacy provider credential", "name", p.Name)
 			}
-			decrypted, err := providerWithOpenSecret(cfg.Auth.Token, p)
+			decrypted, err := providerWithOpenSecret(cfg.Auth.ProviderSecretKey, p)
 			if err != nil {
-				slog.Warn("failed to decrypt llm provider credential", "name", p.Name, "type", p.ProviderType, "error", err)
-				continue
+				slog.Error("provider credential recovery key is unavailable; restore the OS credential-store entry that belongs with this database", "name", p.Name, "type", p.ProviderType, "error", err)
+				os.Exit(1)
 			}
 			provider, err := gateway.BuildProvider(decrypted)
 			if err != nil {
@@ -183,7 +202,7 @@ func run() {
 			if !p.IsActive {
 				return nil, fmt.Errorf("provider %q is inactive", providerID)
 			}
-			decrypted, err := providerWithOpenSecret(cfg.Auth.Token, *p)
+			decrypted, err := providerWithOpenSecret(cfg.Auth.ProviderSecretKey, *p)
 			if err != nil {
 				return nil, err
 			}

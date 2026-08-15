@@ -4,6 +4,51 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.8 - 2026-08-14
+
+### Added
+
+- Sandboxed command execution with a minimal inherited environment, resource
+  quotas and verification evidence.
+- Provider egress allowlists and SSRF defenses for local, private and
+  metadata-service destinations.
+- A dedicated provider-secret encryption key lifecycle independent from the
+  local daemon authentication token.
+- Owner-only provider-key storage in the user configuration directory when a
+  headless host does not provide an operating-system credential service.
+- Serializable, crash-recoverable cost reservations that prevent concurrent
+  runs from overspending a shared budget.
+- Durable WebSocket event replay, explicit resynchronization and bounded
+  backpressure for reconnecting clients.
+- Keyboard workspace navigation, a localized shortcut reference and automated
+  WCAG 2.2 AA checks for critical journeys and dialogs.
+
+### Changed
+
+- The local HTTP and WebSocket boundary now enforces stricter timeouts, request
+  limits, origin validation and graceful shutdown behavior.
+- Navigation, task composition, sessions, routes and settings now adapt to
+  compact desktop windows without global horizontal scrolling.
+
+### Migration and recovery
+
+- Database migrations 27 and 28 add durable cost reservations and replayable
+  event streams. They are additive and run through the existing transactional
+  migration path; create and verify a database backup before upgrading.
+- Existing provider secrets remain readable while the dedicated key is created
+  and persisted. Recovery must restore the provider-secret key together with
+  the database rather than substituting the daemon token. The key uses the
+  operating-system credential store when available; on headless Unix hosts it
+  uses the owner-only `provider-secret-key-v1` file in Oberth's user config
+  directory. Back up the credential-store entry or fallback file together
+  with the database; Oberth does not export it automatically.
+
+## 0.1.0-alpha.7 - 2026-08-14 [withdrawn]
+
+- Withdrawn before GitHub Release publication after the Linux packaged smoke
+  test exposed an unavailable desktop credential service on headless hosts.
+- No assets were published and `main` was not advanced to this tag.
+
 ## 0.1.0-alpha.6 - 2026-08-12
 
 ### Added

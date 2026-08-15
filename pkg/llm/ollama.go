@@ -29,7 +29,7 @@ func NewOllama(baseURL string) *Ollama {
 		baseURL: strings.TrimRight(baseURL, "/"),
 		// The executor owns request deadlines. A fixed client timeout incorrectly
 		// kills healthy local generations while Ollama is still working.
-		httpClient: &http.Client{},
+		httpClient: newEgressClient(0, EgressPolicy{AllowLoopback: true}),
 	}
 }
 
@@ -48,7 +48,7 @@ func (p *Ollama) ProbeActivity(ctx context.Context, model string) Activity {
 		activity.State = "probe_error"
 		return activity
 	}
-	resp, err := (&http.Client{}).Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		activity.State = "unreachable"
 		return activity
@@ -110,8 +110,7 @@ func (p *Ollama) ChatStream(ctx context.Context, req ChatRequest) (<-chan Stream
 		return nil, err
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(httpReq)
+	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, err)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/saterdoe/oberth/internal/config"
 	"github.com/saterdoe/oberth/internal/db"
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/gateway"
@@ -256,6 +257,10 @@ func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/v1/providers/{id}/fetch-models
 // Calls the provider's /v1/models endpoint (OpenAI-compatible) and returns available model IDs.
+func providerModelsEgressPolicy(providerType string) llm.EgressPolicy {
+	return llm.EgressPolicy{AllowLoopback: providerType == "ollama" || providerType == "custom"}
+}
+
 func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -289,7 +294,12 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 	modelsURL += "/models"
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	policy := providerModelsEgressPolicy(p.ProviderType)
+	if err := llm.ValidateProviderURL(modelsURL, policy); err != nil {
+		respondError(w, http.StatusBadRequest, "PROVIDER_DESTINATION_DENIED", err.Error(), nil)
+		return
+	}
+	client := llm.NewEgressClient(15*time.Second, policy)
 	req, err := http.NewRequestWithContext(r.Context(), "GET", modelsURL, nil)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "REQUEST_ERROR", "failed to create request", nil)
@@ -297,7 +307,7 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 
 	if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" {
-		apiKey, openErr := providersecret.Open(s.cfg.Auth.Token, *p.APIKeyEncrypted)
+		apiKey, openErr := providersecret.Open(providerSecretKey(s.cfg), *p.APIKeyEncrypted)
 		if openErr != nil {
 			respondError(w, http.StatusInternalServerError, "PROVIDER_SECRET_UNAVAILABLE", "provider credential could not be decrypted", nil)
 			return
@@ -312,7 +322,7 @@ func (s *Server) handleFetchProviderModels(w http.ResponseWriter, r *http.Reques
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		respondError(w, http.StatusBadGateway, "READ_ERROR", "failed to read response", nil)
 		return
@@ -360,7 +370,7 @@ func (s *Server) sealProviderAPIKey(apiKey *string) (*string, error) {
 	if apiKey == nil {
 		return nil, nil
 	}
-	sealed, err := providersecret.Seal(s.cfg.Auth.Token, *apiKey)
+	sealed, err := providersecret.Seal(providerSecretKey(s.cfg), *apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +396,7 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" {
-		apiKey, openErr := providersecret.Open(s.cfg.Auth.Token, *p.APIKeyEncrypted)
+		apiKey, openErr := providersecret.Open(providerSecretKey(s.cfg), *p.APIKeyEncrypted)
 		if openErr != nil {
 			respondError(w, http.StatusInternalServerError, "PROVIDER_SECRET_UNAVAILABLE", "provider credential could not be decrypted", nil)
 			return
@@ -416,6 +426,13 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 		"input_tokens":  result.InputTokens,
 		"output_tokens": result.OutputTokens,
 	})
+}
+
+func providerSecretKey(cfg *config.Config) string {
+	if strings.TrimSpace(cfg.Auth.ProviderSecretKey) != "" {
+		return cfg.Auth.ProviderSecretKey
+	}
+	return cfg.Auth.Token
 }
 
 func providerVerificationRequest(model string) llm.ChatRequest {

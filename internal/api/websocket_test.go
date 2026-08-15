@@ -83,6 +83,15 @@ func TestHubBroadcastDoesNotBlockOnSlowClient(t *testing.T) {
 	if len(c.ch) > 64 {
 		t.Errorf("expected at most 64 buffered events, got %d", len(c.ch))
 	}
+	foundResync := false
+	for len(c.ch) > 0 {
+		if event := <-c.ch; event.Type == EventResyncRequired {
+			foundResync = true
+		}
+	}
+	if !foundResync {
+		t.Fatal("slow consumer overflow must emit an explicit resync event")
+	}
 }
 
 func TestHubMultipleEventTypes(t *testing.T) {
@@ -123,5 +132,84 @@ func TestHubAddsVersionedOrderedEventEnvelope(t *testing.T) {
 	}
 	if first.AggregateID != "task-1" || second.AggregateID != "task-1" {
 		t.Fatal("aggregate ID was not preserved")
+	}
+}
+
+func TestDurablePayloadRedactsStreamContent(t *testing.T) {
+	payload := durableEventPayload(Event{Type: EventTaskChunk, Payload: map[string]any{"content": "private source"}})
+	redacted, ok := payload.(map[string]any)
+	if !ok || redacted["redacted"] != true {
+		t.Fatalf("task chunks must be redacted before persistence: %#v", payload)
+	}
+	if _, leaked := redacted["content"]; leaked {
+		t.Fatal("durable task chunk payload leaked streamed content")
+	}
+}
+
+func TestProviderModelsEgressPolicyOnlyAllowsExplicitLocalTypes(t *testing.T) {
+	for _, providerType := range []string{"openai", "anthropic", "google"} {
+		if providerModelsEgressPolicy(providerType).AllowLoopback {
+			t.Fatalf("%s must not allow loopback model discovery", providerType)
+		}
+	}
+	for _, providerType := range []string{"ollama", "custom"} {
+		if !providerModelsEgressPolicy(providerType).AllowLoopback {
+			t.Fatalf("%s must allow explicitly configured local model discovery", providerType)
+		}
+	}
+}
+
+func TestDurablePayloadRedactsResultSummary(t *testing.T) {
+	payload := durableEventPayload(Event{Type: EventSessionComplete, Payload: map[string]any{"session_id": "session-1", "summary": "private result"}})
+	redacted := payload.(map[string]any)
+	if _, leaked := redacted["summary"]; leaked || redacted["summary_redacted"] != true {
+		t.Fatalf("durable completion payload leaked result summary: %#v", payload)
+	}
+	if redacted["session_id"] != "session-1" {
+		t.Fatal("durable completion payload lost routing metadata")
+	}
+}
+
+func TestTrimReplayWindowSignalsGapAndKeepsNewestEvents(t *testing.T) {
+	events := make([]Event, maxReplayEvents+5)
+	for i := range events {
+		events[i].Sequence = uint64(i + 1)
+	}
+	trimmed, truncated := trimReplayWindow(events, 0, uint64(len(events)))
+	if !truncated || len(trimmed) != maxReplayEvents {
+		t.Fatalf("expected bounded replay with explicit truncation, got length=%d truncated=%v", len(trimmed), truncated)
+	}
+	if trimmed[0].Sequence != 6 || trimmed[len(trimmed)-1].Sequence != uint64(len(events)) {
+		t.Fatalf("expected newest replay window, got %d..%d", trimmed[0].Sequence, trimmed[len(trimmed)-1].Sequence)
+	}
+}
+
+func TestTrimReplayWindowSignalsRetentionAndPersistenceGaps(t *testing.T) {
+	tests := []struct {
+		name    string
+		events  []Event
+		after   uint64
+		through uint64
+	}{
+		{name: "retention removed prefix", events: []Event{{Sequence: 51}, {Sequence: 52}}, after: 1, through: 52},
+		{name: "all requested events expired", events: nil, after: 1, through: 52},
+		{name: "persistence gap in window", events: []Event{{Sequence: 2}, {Sequence: 4}}, after: 1, through: 4},
+		{name: "missing durable tail", events: []Event{{Sequence: 2}}, after: 1, through: 3},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, truncated := trimReplayWindow(test.events, test.after, test.through)
+			if !truncated {
+				t.Fatal("replay gap must require explicit resynchronization")
+			}
+		})
+	}
+}
+
+func TestTrimReplayWindowKeepsContiguousReplay(t *testing.T) {
+	events := []Event{{Sequence: 8}, {Sequence: 9}, {Sequence: 10}}
+	trimmed, truncated := trimReplayWindow(events, 7, 10)
+	if truncated || len(trimmed) != 3 {
+		t.Fatalf("contiguous replay should not require resync: length=%d truncated=%v", len(trimmed), truncated)
 	}
 }

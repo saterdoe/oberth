@@ -1,6 +1,6 @@
 # Contributing to Oberth
 
-Oberth 0.1.0-alpha.6 is a Public Alpha. Focused bug reports, reproducible test
+Oberth 0.1.0-alpha.8 is a Public Alpha. Focused bug reports, reproducible test
 cases, documentation fixes and small improvements are especially valuable
 while public interfaces are still taking shape.
 

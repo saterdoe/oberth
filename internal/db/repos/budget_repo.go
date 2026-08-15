@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/saterdoe/oberth/internal/db"
 )
+
+var ErrBudgetReservationExceeded = errors.New("budget reservation exceeds hard limit")
+
+type BudgetReservation struct {
+	ID        uuid.UUID
+	BudgetIDs []uuid.UUID
+	Amount    float64
+	ExpiresAt time.Time
+}
 
 // Budget represents a cost budget with soft and hard limits.
 type Budget struct {
@@ -181,4 +191,73 @@ func (r *BudgetRepo) AddSpend(ctx context.Context, id uuid.UUID, amount float64)
 		return db.ErrNotFound
 	}
 	return nil
+}
+
+func (r *BudgetRepo) Reserve(ctx context.Context, providerID *uuid.UUID, amount float64, ttl time.Duration) (*BudgetReservation, error) {
+	if amount <= 0 {
+		return &BudgetReservation{}, nil
+	}
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `SELECT id, hard_limit, current_spend FROM budgets
+		WHERE is_active AND (provider_id IS NULL OR provider_id = @provider_id) ORDER BY id FOR UPDATE`, pgx.NamedArgs{"provider_id": providerID})
+	if err != nil {
+		return nil, err
+	}
+	type candidate struct {
+		id          uuid.UUID
+		hard, spent float64
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.hard, &c.spent); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		candidates = append(candidates, c)
+	}
+	rows.Close()
+	reservation := &BudgetReservation{ID: uuid.New(), Amount: amount, ExpiresAt: time.Now().Add(ttl)}
+	for _, c := range candidates {
+		var active float64
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount),0) FROM cost_reservations WHERE budget_id=$1 AND state='active' AND expires_at>NOW()`, c.id).Scan(&active); err != nil {
+			return nil, err
+		}
+		if c.hard > 0 && c.spent+active+amount > c.hard {
+			return nil, ErrBudgetReservationExceeded
+		}
+		reservation.BudgetIDs = append(reservation.BudgetIDs, c.id)
+	}
+	for _, id := range reservation.BudgetIDs {
+		if _, err := tx.Exec(ctx, `INSERT INTO cost_reservations(reservation_id,budget_id,amount,expires_at) VALUES($1,$2,$3,$4)`, reservation.ID, id, amount, reservation.ExpiresAt); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return reservation, nil
+}
+
+func (r *BudgetRepo) SetReservationState(ctx context.Context, id uuid.UUID, state string) error {
+	if state != "committed" && state != "released" {
+		return errors.New("invalid reservation terminal state")
+	}
+	_, err := r.pool.Exec(ctx, `UPDATE cost_reservations SET state=$2, updated_at=NOW() WHERE reservation_id=$1 AND state='active'`, id, state)
+	return err
+}
+
+func (r *BudgetRepo) ReconcileExpiredReservations(ctx context.Context) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE cost_reservations SET state='expired', updated_at=NOW() WHERE state='active' AND expires_at<=NOW()`)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

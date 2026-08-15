@@ -74,7 +74,7 @@ func NewRuntime(id, root string, policy *permission.Engine) (*Runtime, error) {
 	return &Runtime{
 		id: id, files: files,
 		reader:  toolrunner.NewReader(root, guard, toolrunner.Limits{MaxFiles: 500, MaxBytes: 256 * 1024, MaxMatches: 100}),
-		runner:  toolrunner.NewCommandRunner(root, policy, toolrunner.CommandLimits{Timeout: 5 * time.Minute, MaxOutputBytes: 256 * 1024}),
+		runner:  toolrunner.NewCommandRunner(root, policy, toolrunner.CommandLimits{Timeout: 5 * time.Minute, MaxOutputBytes: 256 * 1024, AllowedEnv: []string{"CI", "NO_COLOR"}}),
 		changes: map[string]ChangeSet{},
 	}, nil
 }

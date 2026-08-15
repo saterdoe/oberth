@@ -24,6 +24,14 @@ type OpenAI struct {
 // NewOpenAI creates a new OpenAI provider.
 // If apiKey is empty, it reads from the OBERTH_OPENAI_API_KEY environment variable.
 func NewOpenAI(baseURL, apiKey string) *OpenAI {
+	return newOpenAI(baseURL, apiKey, EgressPolicy{AllowLoopback: true})
+}
+
+func NewRestrictedOpenAI(baseURL, apiKey string) *OpenAI {
+	return newOpenAI(baseURL, apiKey, EgressPolicy{})
+}
+
+func newOpenAI(baseURL, apiKey string, policy EgressPolicy) *OpenAI {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
@@ -33,7 +41,7 @@ func NewOpenAI(baseURL, apiKey string) *OpenAI {
 	return &OpenAI{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 180 * time.Second},
+		httpClient: newEgressClient(180*time.Second, policy),
 	}
 }
 
@@ -68,8 +76,7 @@ func (p *OpenAI) ChatStream(ctx context.Context, req ChatRequest) (<-chan Stream
 		return nil, err
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(httpReq)
+	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, err)

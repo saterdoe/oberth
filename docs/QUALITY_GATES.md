@@ -12,6 +12,10 @@ The command runs `go vet` for `cmd`, `internal` and `pkg`, Go tests with
 aggregate statement coverage, TypeScript type checking and UI tests with
 statement, branch, function and line coverage.
 
+The UI suite also runs axe against the critical Dashboard, Session and modal
+journeys. Serious or critical WCAG 2.2 AA violations fail the same CI quality
+job; exceptions must be documented and must not disable an entire rule.
+
 ## Initial baselines
 
 The baselines were measured on `main` when the gates were introduced. Thresholds

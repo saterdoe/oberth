@@ -37,11 +37,11 @@ content or free-form task summaries. Durable run evidence remains in the
 versioned run-event store.
 
 Provider-secret keys use the operating-system credential store when available.
-On headless systems without a credential service, Oberth stores the key at
-`$XDG_CONFIG_HOME/oberth/provider-secret-key-v1` (or the platform-equivalent
-user configuration directory) with owner-only permissions. Back up that entry
-or file together with the database; losing it makes encrypted provider
-credentials intentionally unrecoverable.
+On headless Unix systems without a credential service, Oberth stores the key at
+`$XDG_CONFIG_HOME/oberth/provider-secret-key-v1` with owner-only permissions.
+Windows requires its operating-system credential store. Back up the relevant
+credential-store entry or Unix fallback file together with the database;
+losing it makes encrypted provider credentials intentionally unrecoverable.
 
 Unknown or malformed versions fail closed. A failed migration must leave the
 source path unchanged, must not overwrite an existing recovery backup with

@@ -4,6 +4,39 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.7 - 2026-08-14
+
+### Added
+
+- Sandboxed command execution with a minimal inherited environment, resource
+  quotas and verification evidence.
+- Provider egress allowlists and SSRF defenses for local, private and
+  metadata-service destinations.
+- A dedicated provider-secret encryption key lifecycle independent from the
+  local daemon authentication token.
+- Serializable, crash-recoverable cost reservations that prevent concurrent
+  runs from overspending a shared budget.
+- Durable WebSocket event replay, explicit resynchronization and bounded
+  backpressure for reconnecting clients.
+- Keyboard workspace navigation, a localized shortcut reference and automated
+  WCAG 2.2 AA checks for critical journeys and dialogs.
+
+### Changed
+
+- The local HTTP and WebSocket boundary now enforces stricter timeouts, request
+  limits, origin validation and graceful shutdown behavior.
+- Navigation, task composition, sessions, routes and settings now adapt to
+  compact desktop windows without global horizontal scrolling.
+
+### Migration and recovery
+
+- Database migrations 27 and 28 add durable cost reservations and replayable
+  event streams. They are additive and run through the existing transactional
+  migration path; preserve the automatic pre-migration backup before rollback.
+- Existing provider secrets remain readable while the dedicated key is created
+  and persisted. Recovery must restore the provider-secret key together with
+  the database rather than substituting the daemon token.
+
 ## 0.1.0-alpha.6 - 2026-08-12
 
 ### Added

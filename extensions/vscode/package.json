@@ -3,7 +3,7 @@
   "publisher": "oberth",
   "displayName": "oberth",
   "description": "Delegate coding tasks to the local Oberth runtime and review their isolated results.",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "license": "Apache-2.0",
   "files": ["extension.js", "cli.js", "README.md"],
   "repository": {

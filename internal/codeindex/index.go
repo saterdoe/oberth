@@ -26,6 +26,8 @@ type state struct {
 	LastIndexed               time.Time
 	Files                     map[string]string
 	Chunks                    map[string]Chunk
+	Graph                     GraphSnapshot
+	GraphEdgesByFile          map[string][]string
 }
 type Index struct {
 	root, statePath string
@@ -52,11 +54,17 @@ func openWithIdentity(root, identityRoot, dataDir string, embedder Embedder, sto
 	if dataDir == "" {
 		return nil, errors.New("code index data directory is required")
 	}
-	i := &Index{root: root, statePath: filepath.Join(dataDir, "state.json"), options: opts, embedder: embedder, store: store, state: state{Version: SchemaVersion, RepoID: repo, Files: map[string]string{}, Chunks: map[string]Chunk{}}}
+	i := &Index{root: root, statePath: filepath.Join(dataDir, "state.json"), options: opts, embedder: embedder, store: store, state: state{Version: SchemaVersion, RepoID: repo, Files: map[string]string{}, Chunks: map[string]Chunk{}, Graph: GraphSnapshot{SchemaVersion: GraphSchemaVersion, RepoID: repo, Nodes: map[string]GraphNode{}, Edges: map[string]GraphEdge{}}, GraphEdgesByFile: map[string][]string{}}}
 	if b, e := os.ReadFile(i.statePath); e == nil {
 		var old state
 		if json.Unmarshal(b, &old) == nil && old.Version == SchemaVersion && old.RepoID == repo && old.Embedder == fingerprint(embedder) {
 			i.state = old
+			if i.state.Graph.Nodes == nil {
+				i.state.Graph = GraphSnapshot{SchemaVersion: GraphSchemaVersion, RepoID: repo, Nodes: map[string]GraphNode{}, Edges: map[string]GraphEdge{}}
+			}
+			if i.state.GraphEdgesByFile == nil {
+				i.state.GraphEdgesByFile = map[string][]string{}
+			}
 		}
 	}
 	return i, nil
@@ -110,6 +118,7 @@ func (i *Index) Update(ctx context.Context) (Metrics, error) {
 	}
 	m := Metrics{Discovered: len(files)}
 	current := map[string]bool{}
+	changed := map[string]bool{}
 	var pendingPoints []vector.Point
 	var pendingDeletes []string
 	for _, f := range files {
@@ -125,6 +134,7 @@ func (i *Index) Update(ctx context.Context) (Metrics, error) {
 			}
 			continue
 		}
+		changed[f.Path] = true
 		chunks := ChunkFile(i.state.RepoID, f, i.options, fingerprint(i.embedder))
 		if i.options.MaxChunks > 0 && len(i.state.Chunks)+len(chunks) > i.options.MaxChunks {
 			m.Skipped++
@@ -183,6 +193,7 @@ func (i *Index) Update(ctx context.Context) (Metrics, error) {
 	}
 	for path := range i.state.Files {
 		if !current[path] {
+			changed[path] = true
 			ids := i.idsForPath(path)
 			if i.store != nil && len(ids) > 0 {
 				pendingDeletes = append(pendingDeletes, ids...)
@@ -194,6 +205,13 @@ func (i *Index) Update(ctx context.Context) (Metrics, error) {
 			m.Deleted += len(ids)
 		}
 	}
+	if i.state.Graph.SchemaVersion != GraphSchemaVersion || len(i.state.Graph.Nodes) == 0 {
+		for _, file := range files {
+			changed[file.Path] = true
+		}
+	}
+	i.state.Graph = graphForFiles(i.state.RepoID, files, i.state.Graph.Nodes, i.state.Graph.Edges, i.state.GraphEdgesByFile, changed)
+	i.state.GraphEdgesByFile = importEdgesByFile(i.state.Graph.Edges)
 	// Persist vectors at most twice per refresh instead of rewriting the full
 	// local store once per changed file.
 	if i.store != nil && len(pendingPoints) > 0 {
@@ -211,6 +229,36 @@ func (i *Index) Update(ctx context.Context) (Metrics, error) {
 	m.Duration = time.Since(start)
 	i.status = Status{SchemaVersion: SchemaVersion, RepoID: i.state.RepoID, IndexedFiles: len(i.state.Files), ChunkCount: len(i.state.Chunks), LastIndexed: i.state.LastIndexed, Fresh: true, Metrics: m, LastError: i.status.LastError}
 	return m, i.persist()
+}
+
+func importEdgesByFile(edges map[string]GraphEdge) map[string][]string {
+	byFile := make(map[string][]string)
+	for id, edge := range edges {
+		if edge.Kind == GraphEdgeImports {
+			byFile[edge.SourcePath] = append(byFile[edge.SourcePath], id)
+		}
+	}
+	for filePath := range byFile {
+		sort.Strings(byFile[filePath])
+	}
+	return byFile
+}
+
+func (i *Index) Graph() GraphSnapshot {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return cloneGraph(i.state.Graph)
+}
+
+func cloneGraph(source GraphSnapshot) GraphSnapshot {
+	copy := GraphSnapshot{SchemaVersion: source.SchemaVersion, RepoID: source.RepoID, Fingerprint: source.Fingerprint, Nodes: make(map[string]GraphNode, len(source.Nodes)), Edges: make(map[string]GraphEdge, len(source.Edges))}
+	for id, node := range source.Nodes {
+		copy.Nodes[id] = node
+	}
+	for id, edge := range source.Edges {
+		copy.Edges[id] = edge
+	}
+	return copy
 }
 func (i *Index) idsForPath(path string) []string {
 	var ids []string

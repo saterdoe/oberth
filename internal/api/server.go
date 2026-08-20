@@ -161,6 +161,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 	s.mux.HandleFunc("GET /api/v1/projects/{id}/code-index", s.handleGetProjectCodeIndex)
 	s.mux.HandleFunc("POST /api/v1/projects/{id}/code-index/reindex", s.handleReindexProjectCode)
+	s.mux.HandleFunc("GET /api/v1/projects/{id}/code-map/nodes", s.handleFindCodeMapNodes)
+	s.mux.HandleFunc("GET /api/v1/projects/{id}/code-map/neighborhood", s.handleCodeMapNeighborhood)
 	s.mux.HandleFunc("GET /api/v1/repo/analyze", s.handleAnalyzeRepository)
 	s.mux.HandleFunc("GET /api/v1/repo/search", s.handleSearchRepository)
 

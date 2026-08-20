@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -94,6 +96,58 @@ func TestGraphLeavesDynamicAndAmbiguousJSImportsUnresolved(t *testing.T) {
 		target := graph.Nodes[edge.TargetID]
 		require.NotEqual(t, "dynamic.ts", target.Path, "dynamic import must not be represented as a static edge")
 	}
+}
+
+func TestGraphSanitizesUntrustedLabelsAndBoundsImports(t *testing.T) {
+	root := t.TempDir()
+	imports := make([]string, 0, maxImportsPerFile+50)
+	for n := 0; n < maxImportsPerFile+50; n++ {
+		imports = append(imports, "import 'package-"+strconv.Itoa(n)+"'")
+	}
+	imports[0] = "import 'javascript:<svg onload=alert(1)>\u202e'"
+	writeGraphFixture(t, root, "app.ts", strings.Join(imports, "\n"))
+	index, err := Open(root, filepath.Join(t.TempDir(), "index"), nil, nil, DefaultOptions())
+	require.NoError(t, err)
+	_, err = index.Update(context.Background())
+	require.NoError(t, err)
+	graph := index.Graph()
+
+	importCount := 0
+	for _, edge := range graph.Edges {
+		if edge.Kind == GraphEdgeImports {
+			importCount++
+		}
+	}
+	require.Equal(t, maxImportsPerFile, importCount)
+	for _, node := range graph.Nodes {
+		require.NotContains(t, node.Label, "\u202e")
+		require.LessOrEqual(t, len(node.Label), maxGraphLabelBytes)
+	}
+}
+
+func FuzzStaticImportExtraction(f *testing.F) {
+	f.Add("import x from './x'\n", "typescript")
+	f.Add("package x\nimport \"fmt\"\n", "go")
+	f.Add("import '\u202ejavascript:<svg>'\n", "javascript")
+	f.Fuzz(func(t *testing.T, content, language string) {
+		if len(content) > 32*1024 {
+			t.Skip()
+		}
+		if language != "go" && language != "typescript" && language != "javascript" && language != "tsx" && language != "jsx" {
+			language = "typescript"
+		}
+		file := File{Path: "source.ts", Content: []byte(content), Language: language}
+		nodes := structuralNodes("repo:fuzz", []File{file})
+		edges := extractImportEdges("repo:fuzz", file, map[string]File{file.Path: file}, "", nodes)
+		if len(edges) > maxImportsPerFile {
+			t.Fatalf("extractor exceeded import budget: %d", len(edges))
+		}
+		for _, node := range nodes {
+			if len(node.Label) > maxGraphLabelBytes || strings.ContainsRune(node.Label, '\u202e') {
+				t.Fatalf("unsafe graph label %q", node.Label)
+			}
+		}
+	})
 }
 
 func requireGraphImport(t *testing.T, graph GraphSnapshot, sourcePath, targetValue, resolution string) {

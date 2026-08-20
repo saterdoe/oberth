@@ -8,9 +8,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 const GraphSchemaVersion = "1"
+
+const (
+	maxGraphLabelBytes = 256
+	maxImportSpecBytes = 512
+	maxImportsPerFile  = 2048
+)
 
 type GraphNodeKind string
 type GraphEdgeKind string
@@ -128,10 +135,10 @@ func structuralNodes(repoID string, files []File) map[string]GraphNode {
 	repo := GraphNode{ID: graphNodeID(repoID, GraphNodeRepository, repoID), RepoID: repoID, Kind: GraphNodeRepository, Label: "repository", SchemaVersion: GraphSchemaVersion}
 	nodes[repo.ID] = repo
 	for _, f := range files {
-		fileNode := GraphNode{ID: graphNodeID(repoID, GraphNodeFile, f.Path), RepoID: repoID, Kind: GraphNodeFile, Label: path.Base(f.Path), Path: f.Path, Language: f.Language, SchemaVersion: GraphSchemaVersion}
+		fileNode := GraphNode{ID: graphNodeID(repoID, GraphNodeFile, f.Path), RepoID: repoID, Kind: GraphNodeFile, Label: safeGraphLabel(path.Base(f.Path)), Path: f.Path, Language: f.Language, SchemaVersion: GraphSchemaVersion}
 		nodes[fileNode.ID] = fileNode
 		for dir := path.Dir(f.Path); dir != "." && dir != "/"; dir = path.Dir(dir) {
-			node := GraphNode{ID: graphNodeID(repoID, GraphNodeDirectory, dir), RepoID: repoID, Kind: GraphNodeDirectory, Label: path.Base(dir), Path: dir, SchemaVersion: GraphSchemaVersion}
+			node := GraphNode{ID: graphNodeID(repoID, GraphNodeDirectory, dir), RepoID: repoID, Kind: GraphNodeDirectory, Label: safeGraphLabel(path.Base(dir)), Path: dir, SchemaVersion: GraphSchemaVersion}
 			nodes[node.ID] = node
 		}
 	}
@@ -190,8 +197,11 @@ func extractGoImports(repoID string, file File, files map[string]File, module st
 	}
 	var out []GraphEdge
 	for _, spec := range parsed.Imports {
+		if len(out) >= maxImportsPerFile {
+			break
+		}
 		importPath, err := strconv.Unquote(spec.Path.Value)
-		if err != nil || importPath == "C" {
+		if err != nil || importPath == "C" || len(importPath) == 0 || len(importPath) > maxImportSpecBytes {
 			continue
 		}
 		line := 1
@@ -227,10 +237,16 @@ var jsImportRE = regexp.MustCompile(`(?m)^\s*(?:import\s+(?:[^'"\n]+?\s+from\s+)
 func extractJSImports(repoID string, file File, files map[string]File, nodes map[string]GraphNode) []GraphEdge {
 	var out []GraphEdge
 	for _, match := range jsImportRE.FindAllSubmatchIndex(file.Content, -1) {
+		if len(out) >= maxImportsPerFile {
+			break
+		}
 		if len(match) < 4 {
 			continue
 		}
 		spec := string(file.Content[match[2]:match[3]])
+		if len(spec) == 0 || len(spec) > maxImportSpecBytes {
+			continue
+		}
 		targetID, resolution := resolveJSTarget(repoID, file.Path, spec, files, nodes)
 		out = append(out, importEdge(repoID, file.Path, targetID, lineForOffset(file.Content, match[2]), "static-js-imports", resolution))
 	}
@@ -253,7 +269,7 @@ func resolveJSTarget(repoID, source, spec string, files map[string]File, nodes m
 
 func externalNode(repoID, label string, nodes map[string]GraphNode) string {
 	id := graphNodeID(repoID, GraphNodeExternal, label)
-	nodes[id] = GraphNode{ID: id, RepoID: repoID, Kind: GraphNodeExternal, Label: label, SchemaVersion: GraphSchemaVersion}
+	nodes[id] = GraphNode{ID: id, RepoID: repoID, Kind: GraphNodeExternal, Label: safeGraphLabel(label), SchemaVersion: GraphSchemaVersion}
 	return id
 }
 
@@ -291,4 +307,27 @@ func graphFingerprint(nodes map[string]GraphNode, edges map[string]GraphEdge) st
 	}
 	sort.Strings(parts)
 	return hash(parts...)
+}
+
+func safeGraphLabel(value string) string {
+	value = strings.ToValidUTF8(value, "�")
+	var builder strings.Builder
+	for _, r := range value {
+		if unicode.IsControl(r) || isBidiControl(r) {
+			continue
+		}
+		if builder.Len()+len(string(r)) > maxGraphLabelBytes {
+			break
+		}
+		builder.WriteRune(r)
+	}
+	label := strings.TrimSpace(builder.String())
+	if label == "" {
+		return "unnamed"
+	}
+	return label
+}
+
+func isBidiControl(r rune) bool {
+	return r == '\u061c' || r == '\u200e' || r == '\u200f' || r >= '\u202a' && r <= '\u202e' || r >= '\u2066' && r <= '\u2069'
 }

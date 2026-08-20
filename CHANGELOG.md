@@ -4,6 +4,28 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- A private, incremental Code Map for static Go and TypeScript/JavaScript
+  imports with typed relationships, source evidence, confidence and stable
+  repository-scoped identities.
+- Bounded Code Map APIs and an accessible local relationship explorer with
+  directional and table views, freshness, coverage and truncation indicators.
+- A read-only handoff from selected Code Map evidence into Oberth conversations
+  and the existing reviewed planning workflow.
+
+### Security
+
+- Code Map extraction is resource-bounded and local-only; graph API responses
+  omit source, snippets, vectors and absolute paths. Untrusted labels are
+  sanitized and the desktop UI declares a restrictive content-security policy.
+
+### Limitations
+
+- Code Map v1 covers containment and static imports only. Calls, references,
+  inheritance, dynamic imports, additional languages, global/cross-repository
+  graphs and graph export remain intentionally unsupported.
+
 ## 0.1.0-alpha.8 - 2026-08-14
 
 ### Added

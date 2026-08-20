@@ -50,7 +50,9 @@ type GraphQueryResult struct {
 }
 
 func (i *Index) FindGraphNodes(query string, limit int, cursor string) (GraphQueryResult, error) {
-	graph := i.Graph()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	graph := i.state.Graph
 	query = strings.ToLower(strings.TrimSpace(query))
 	ids := make([]string, 0, len(graph.Nodes))
 	for id, node := range graph.Nodes {
@@ -60,11 +62,13 @@ func (i *Index) FindGraphNodes(query string, limit int, cursor string) (GraphQue
 	}
 	sort.Strings(ids)
 	result, err := pageGraph(graph, ids, nil, limit, cursor)
-	return i.withGraphStatus(result), err
+	return i.withGraphStatusLocked(result), err
 }
 
 func (i *Index) GraphNeighborhood(nodeID string, direction GraphDirection, limit int, cursor string) (GraphQueryResult, error) {
-	graph := i.Graph()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	graph := i.state.Graph
 	if _, ok := graph.Nodes[nodeID]; !ok {
 		return GraphQueryResult{}, ErrGraphNodeNotFound
 	}
@@ -79,13 +83,12 @@ func (i *Index) GraphNeighborhood(nodeID string, direction GraphDirection, limit
 	}
 	sort.Strings(edgeIDs)
 	result, err := pageGraph(graph, nil, edgeIDs, limit, cursor)
-	return i.withGraphStatus(result), err
+	return i.withGraphStatusLocked(result), err
 }
 
-func (i *Index) withGraphStatus(result GraphQueryResult) GraphQueryResult {
-	status := i.Status()
-	result.LastIndexed = status.LastIndexed
-	result.Fresh = status.Fresh
+func (i *Index) withGraphStatusLocked(result GraphQueryResult) GraphQueryResult {
+	result.LastIndexed = i.state.LastIndexed
+	result.Fresh = !result.LastIndexed.IsZero() && time.Since(result.LastIndexed) < 10*time.Minute
 	return result
 }
 

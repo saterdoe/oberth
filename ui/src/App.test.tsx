@@ -60,6 +60,8 @@ describe('task workspace', () => {
       if (url.endsWith('/costs')) return ok({})
       if (url.endsWith('/projects')) return ok(projectFixtures)
       if (url.endsWith('/projects/project-1/code-index')) return ok({schema_version:'1',repo_id:'repo:test',indexed_files:12,chunk_count:34,last_indexed:new Date().toISOString(),fresh:true})
+      if (url.includes('/projects/project-1/code-map/nodes')) return ok({schema_version:'1',repo_id:'repo:test',fingerprint:'graph:test',fresh:true,last_indexed:new Date().toISOString(),coverage:{languages:{typescript:2},node_count:2,edge_count:1},truncated:false,remaining:0,edges:[],nodes:[{id:'node:app',repo_id:'repo:test',kind:'file',label:'app.ts',path:'src/app.ts',language:'typescript',schema_version:'1'}]})
+      if (url.includes('/projects/project-1/code-map/neighborhood')) return ok({schema_version:'1',repo_id:'repo:test',fingerprint:'graph:test',fresh:true,last_indexed:new Date().toISOString(),coverage:{languages:{typescript:2},node_count:2,edge_count:1},truncated:false,remaining:0,nodes:[{id:'node:app',repo_id:'repo:test',kind:'file',label:'app.ts',path:'src/app.ts',language:'typescript',schema_version:'1'},{id:'node:db',repo_id:'repo:test',kind:'file',label:'db.ts',path:'src/db.ts',language:'typescript',schema_version:'1'}],edges:[{id:'edge:1',source_id:'node:app',target_id:'node:db',kind:'imports',source_path:'src/app.ts',range:{start_line:3,end_line:3},extractor:'static-js-imports',confidence:'extracted',resolution:'resolved repository-relative import'}]})
       if (url.includes('/git/status?path=')) return ok({ files: [], branch: 'main' })
       if (url.endsWith('/git/diff')) return ok({ files: [] })
       if (url.includes('/verifier/plan?path=')) return ok({ commands: [] })
@@ -414,6 +416,20 @@ describe('task workspace', () => {
     expect(screen.getByText('Project 5')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'Show less'}))
     expect(screen.queryByText('Project 4')).not.toBeInTheDocument()
+  })
+
+  it('explores a bounded code-map neighborhood with an equivalent table view', async () => {
+    render(<App />)
+    fireEvent.click(screen.getAllByText('Settings')[0])
+    fireEvent.click(await screen.findByRole('button',{name:'Explore relationships'}))
+    expect(await screen.findByRole('dialog',{name:'Code Map'})).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button',{name:/app\.ts/}))
+    expect(await screen.findByText('db.ts')).toBeInTheDocument()
+    expect(screen.getByText('src/app.ts:3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Table'}))
+    expect(screen.getByRole('columnheader',{name:'Relationship'})).toBeInTheDocument()
+    expect(screen.getByText('imports · extracted')).toBeInTheDocument()
+    expect(screen.getByText('Current index')).toBeInTheDocument()
   })
 
   it('clears provider credentials from the form immediately after saving', async () => {

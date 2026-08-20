@@ -419,6 +419,7 @@ describe('task workspace', () => {
   })
 
   it('explores a bounded code-map neighborhood with an equivalent table view', async () => {
+    providerFixtures=[{id:'provider-1',name:'Local',provider_type:'ollama',is_active:true,default_model:'coder',models:'coder'}]
     render(<App />)
     fireEvent.click(screen.getAllByText('Settings')[0])
     fireEvent.click(await screen.findByRole('button',{name:'Explore relationships'}))
@@ -430,6 +431,15 @@ describe('task workspace', () => {
     expect(screen.getByRole('columnheader',{name:'Relationship'})).toBeInTheDocument()
     expect(screen.getByText('imports · extracted')).toBeInTheDocument()
     expect(screen.getByText('Current index')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Ask Oberth about this'}))
+    const draft=await screen.findByRole('textbox',{name:/Qué querés lograr/})
+    expect((draft as HTMLTextAreaElement).value).toContain('app.ts')
+    expect(screen.getByRole('combobox',{name:'Repositorio'})).toHaveValue('project-1')
+    fireEvent.click(screen.getByRole('button',{name:'Crear y ejecutar en Demo'}))
+    await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/tasks$/),expect.objectContaining({method:'POST',body:expect.stringContaining('"code_map_context"')})))
+    const taskCall=(fetch as unknown as {mock:{calls:[string,RequestInit][]}}).mock.calls.find(([url,init])=>String(url).endsWith('/tasks')&&init?.method==='POST')
+    const taskBody=JSON.parse(String(taskCall?.[1]?.body))
+    expect(taskBody.constraints.code_map_context).toMatchObject({schema_version:'1',fingerprint:'graph:test',node_ids:['node:app','node:db'],edge_ids:['edge:1']})
   })
 
   it('clears provider credentials from the form immediately after saving', async () => {

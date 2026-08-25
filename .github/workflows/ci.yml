@@ -50,6 +50,31 @@ jobs:
           path: artifacts/coverage
           if-no-files-found: warn
 
+  performance:
+    name: Performance budgets
+    runs-on: ubuntu-latest
+    env:
+      OBERTH_PERF_REPORT: artifacts/performance/go-performance.json
+      OBERTH_UI_BUDGET_REPORT: artifacts/performance/ui-bundle.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm --prefix ui ci
+      - run: npm run test:performance
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: performance-reports
+          path: artifacts/performance
+          if-no-files-found: error
+
   portable-cli:
     name: Portable setup smoke (${{ matrix.os }})
     strategy:

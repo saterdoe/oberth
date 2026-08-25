@@ -23,4 +23,3 @@ For an installed provider, use `oberth provider verify <provider-id>` to verify
 reachability and model discovery. That command is a connectivity check, not a
 capability certification. Provider/model capability evidence must be captured
 when a workflow stage starts and revalidated before fallback.
-

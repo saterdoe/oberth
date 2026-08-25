@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.9 - 2026-08-25
+
 ### Added
 
 - A private, incremental Code Map for static Go and TypeScript/JavaScript
@@ -13,6 +15,15 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   directional and table views, freshness, coverage and truncation indicators.
 - A read-only handoff from selected Code Map evidence into Oberth conversations
   and the existing reviewed planning workflow.
+- A deterministic provider-conformance harness and documented compatibility
+  matrix for chat, streaming, tools, cancellation, timeouts and malformed
+  responses without cloud credentials.
+- Per-stage and per-model context capability snapshots with conservative
+  unknown-model defaults, explicit output/tool reserves and fallback prompt
+  recompilation before a smaller model is invoked.
+- Reproducible small, medium and large performance budgets for startup,
+  indexing, API serialization, context compilation and the frontend bundle,
+  with retained CI reports.
 
 ### Security
 

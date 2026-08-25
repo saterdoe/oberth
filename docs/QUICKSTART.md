@@ -81,6 +81,8 @@ configuration before starting a task.
 
 Provider compatibility varies by model. A successful chat response does not
 guarantee reliable tool use or completion of a coding task.
+See the maintained [provider compatibility matrix](PROVIDER_COMPATIBILITY.md)
+for the capability contract, limitations, and deterministic local test scope.
 
 ## Run and review a task
 

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	semcontext "github.com/saterdoe/oberth/internal/context"
 	"github.com/saterdoe/oberth/pkg/llm"
 )
 
@@ -86,6 +87,29 @@ func TestExecuteStep_PrimarySuccess(t *testing.T) {
 	assert.Equal(t, "success response", resp.Content)
 	assert.Equal(t, 10, resp.InputTokens)
 	assert.Equal(t, 20, resp.OutputTokens)
+}
+
+func TestPrepareAttemptRevalidatesSmallerFallbackBudget(t *testing.T) {
+	messages := []llm.Message{{Role: "system", Content: strings.Repeat("s", 80)}, {Role: "user", Content: strings.Repeat("old", 300)}, {Role: "user", Content: strings.Repeat("latest", 300)}}
+	step := Step{MaxTokens: 2000, Budget: &semcontext.EffectiveModelBudget{SafePromptTokens: 4000, ReservedOutputTokens: 1200}, Fallbacks: []Step{{MaxTokens: 2000, Budget: &semcontext.EffectiveModelBudget{SafePromptTokens: 300, ReservedOutputTokens: 200}}}}
+	primaryMessages, primaryMax, _ := prepareAttempt(step, 0, messages)
+	fallbackMessages, fallbackMax, _ := prepareAttempt(step, 1, messages)
+	if len(primaryMessages) != len(messages) || primaryMax != 1200 {
+		t.Fatalf("unexpected primary preparation: %d/%d", len(primaryMessages), primaryMax)
+	}
+	if fallbackMax != 200 {
+		t.Fatalf("fallback was not recompiled: %d/%d", len(fallbackMessages), fallbackMax)
+	}
+	if !strings.Contains(fallbackMessages[len(fallbackMessages)-1].Content, "Context reduced for fallback model") {
+		t.Fatal("fallback reduction must be visible")
+	}
+	tokens := 0
+	for _, message := range fallbackMessages {
+		tokens += len([]rune(message.Content))/4 + 4
+	}
+	if tokens > 300 {
+		t.Fatalf("fallback prompt still exceeds effective budget: %d", tokens)
+	}
 }
 
 func TestExecuteStep_PrimaryTimeout_FallbackSuccess(t *testing.T) {

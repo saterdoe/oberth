@@ -50,10 +50,11 @@ type taskRunResponse struct {
 }
 
 type taskExecutionStage struct {
-	ID         string `json:"id"`
-	Role       string `json:"role"`
-	ProviderID string `json:"provider_id"`
-	Model      string `json:"model"`
+	ID           string                              `json:"id"`
+	Role         string                              `json:"role"`
+	ProviderID   string                              `json:"provider_id"`
+	Model        string                              `json:"model"`
+	Capabilities *semcontext.ModelCapabilityMetadata `json:"capabilities,omitempty"`
 }
 
 type taskExecutionPlan struct {
@@ -182,6 +183,20 @@ func primaryExecutionStage(stages []taskExecutionStage) *taskExecutionStage {
 	}
 	if len(stages) > 0 {
 		return &stages[0]
+	}
+	return nil
+}
+
+func executionStageForModel(stages []taskExecutionStage, providerID, model string) *taskExecutionStage {
+	for i := range stages {
+		if stages[i].ProviderID == providerID && stages[i].Model == model && stages[i].Role == "development" {
+			return &stages[i]
+		}
+	}
+	for i := range stages {
+		if stages[i].ProviderID == providerID && stages[i].Model == model {
+			return &stages[i]
+		}
 	}
 	return nil
 }
@@ -648,26 +663,42 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 	readOnlyRequest := interactionMode == "query" || interactionMode == "plan" || (interactionMode == "" && isReadOnlyRequest(task.Title+" "+task.Description))
 	contextPipeline := semcontext.NewPipeline(s.vaultConn, s.searcher)
 	retrievalMetrics := semcontext.RetrievalMetrics{}
+	executionStages := parseTaskExecutionPlan(task.Constraints)
+	providerType, budgetRole := "custom", "development"
+	var capabilityMetadata *semcontext.ModelCapabilityMetadata
+	if selectedStage := executionStageForModel(executionStages, providerID, model); selectedStage != nil {
+		budgetRole, capabilityMetadata = selectedStage.Role, selectedStage.Capabilities
+	}
+	if id, parseErr := uuid.Parse(providerID); parseErr == nil {
+		if selected, providerErr := s.providers.GetByID(ctx, id); providerErr == nil {
+			providerType = selected.ProviderType
+		}
+	}
+	effectiveBudget := semcontext.ResolveModelBudget(providerType, model, budgetRole, s.cfg.Context.MaxTokens, s.cfg.Context.ReserveOutputTokens, capabilityMetadata)
 	compileOptions := semcontext.CompileOptions{
 		Mode:                  semcontext.ModeDev,
-		MaxTokens:             s.cfg.Context.MaxTokens,
-		ReserveOutputTokens:   s.cfg.Context.ReserveOutputTokens,
+		MaxTokens:             effectiveBudget.AvailableInputTokens,
+		ReserveOutputTokens:   effectiveBudget.ReservedOutputTokens,
 		MaxSourcesPerKind:     s.cfg.Context.MaxSourcesPerKind,
 		Cache:                 s.contextCache,
 		DisableCodeIndex:      !s.cfg.CodeIndex.IsEnabled(),
 		CodeIndex:             codeindex.Options{MaxFileBytes: s.cfg.CodeIndex.MaxFileBytes, MaxFiles: s.cfg.CodeIndex.MaxFiles, MaxChunks: s.cfg.CodeIndex.MaxChunks, MaxChunkLines: s.cfg.CodeIndex.MaxChunkLines, OverlapLines: s.cfg.CodeIndex.OverlapLines, Exclude: s.cfg.CodeIndex.Exclude},
 		CodeIndexIdentityRoot: run.BaseRepo,
 	}
-	modelOutputTokens := 0
+	modelOutputTokens := effectiveBudget.ReservedOutputTokens
 	localOllama := false
 	if id, parseErr := uuid.Parse(providerID); parseErr == nil {
 		if selected, providerErr := s.providers.GetByID(ctx, id); providerErr == nil {
 			compileOptions = contextOptionsForProvider(compileOptions, selected.ProviderType)
 			if strings.EqualFold(strings.TrimSpace(selected.ProviderType), "ollama") {
 				localOllama = true
-				modelOutputTokens = 800
+				if modelOutputTokens <= 0 || modelOutputTokens > 800 {
+					modelOutputTokens = 800
+				}
 				if readOnlyRequest {
-					modelOutputTokens = 400
+					if modelOutputTokens > 400 {
+						modelOutputTokens = 400
+					}
 				}
 			}
 		}
@@ -737,7 +768,6 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 			"metrics":              compiled.Metrics,
 		})
 	}
-	executionStages := parseTaskExecutionPlan(task.Constraints)
 	developmentIndex := -1
 	for i, stage := range executionStages {
 		if stage.Role == "development" {
@@ -810,6 +840,10 @@ Use finish only after inspecting the result and include a concise summary.`
 		"capabilities":  []string{"typed_actions", "read", "search", "patch", "record_reasoning", "stop_insufficient_evidence", "command", "finish"},
 	}
 	runtimeEvidence["interaction_mode"] = map[bool]string{true: "query", false: "implementation"}[readOnlyRequest]
+	runtimeEvidence["context_budget"] = effectiveBudget
+	if effectiveBudget.CapabilityDiagnostic != "" {
+		runWarnings = append(runWarnings, effectiveBudget.CapabilityDiagnostic)
+	}
 	if interactionMode != "" {
 		runtimeEvidence["interaction_mode"] = interactionMode
 	}
@@ -841,6 +875,17 @@ stop_insufficient_evidence with that unknown_id and a concise summary. This is
 a legitimate outcome and does not require a verification command.
 `, "")
 	}
+	if encodedTools, marshalErr := json.Marshal(availableTools); marshalErr == nil {
+		actualToolOverhead := len(encodedTools)/4 + 16
+		if actualToolOverhead > effectiveBudget.ToolOverheadTokens {
+			effectiveBudget.ToolOverheadTokens = actualToolOverhead
+			effectiveBudget.SafePromptTokens = effectiveBudget.AvailableInputTokens - effectiveBudget.ReservedOutputTokens - actualToolOverhead
+			if effectiveBudget.SafePromptTokens < 256 {
+				effectiveBudget.SafePromptTokens = 256
+			}
+			runtimeEvidence["context_budget"] = effectiveBudget
+		}
+	}
 	runtimeWorkspace, workspaceErr := workspacepkg.NewRuntime(run.ID.String(), run.WorktreePath, s.perm)
 	if workspaceErr != nil {
 		runWarnings = append(runWarnings, workspaceErr.Error())
@@ -851,6 +896,7 @@ a legitimate outcome and does not require a verification command.
 	}
 	nativeToolCalls := 0
 	structuredTransportFallbacks := 0
+	modelContextReductions := 0
 	maxIterations := s.cfg.Agent.MaxIterations
 	if id, parseErr := uuid.Parse(providerID); parseErr == nil {
 		if selected, providerErr := s.providers.GetByID(ctx, id); providerErr == nil && selected.ProviderType == "ollama" && maxIterations < 24 {
@@ -871,8 +917,8 @@ a legitimate outcome and does not require a verification command.
 	}
 	agentResult, err := agentruntime.Run(gateway.WithAuditSessionID(ctx, session.ID.String()), typedSystemPrompt, prompt, agentruntime.Config{
 		MaxTurns:            maxIterations,
-		MaxInputTokens:      s.cfg.Context.MaxTokens * maxIterations,
-		MaxOutputTokens:     s.cfg.Context.ReserveOutputTokens * maxIterations,
+		MaxInputTokens:      effectiveBudget.AvailableInputTokens * maxIterations,
+		MaxOutputTokens:     effectiveBudget.ReservedOutputTokens * maxIterations,
 		MaxToolCalls:        maxIterations - 1,
 		MaxFormatRetries:    2,
 		MaxProtocolRetries:  2,
@@ -893,7 +939,7 @@ a legitimate outcome and does not require a verification command.
 				for _, message := range messages {
 					estimatedInput += len([]rune(message.Content))/4 + 4
 				}
-				inputReserve, outputReserve := estimateCallCost(model, estimatedInput, s.cfg.Context.ReserveOutputTokens)
+				inputReserve, outputReserve := estimateCallCost(model, estimatedInput, effectiveBudget.ReservedOutputTokens)
 				reservation, budgetErr = s.costTracker.Reserve(modelCtx, providerID, inputReserve+outputReserve)
 				if errors.Is(budgetErr, cost.ErrBudgetExceeded) {
 					return agentruntime.ModelResponse{}, agentruntime.ErrBudgetExceeded
@@ -911,14 +957,19 @@ a legitimate outcome and does not require a verification command.
 			for _, message := range messages {
 				llmMessages = append(llmMessages, llm.Message{Role: message.Role, Content: message.Content})
 			}
-			response, err := s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1", ProviderID: providerID, Model: model, Tools: availableTools, MaxTokens: modelOutputTokens}, llmMessages, func(content string) {
+			var reduced int
+			llmMessages, reduced = fitLLMMessages(llmMessages, effectiveBudget.SafePromptTokens)
+			if reduced > 0 {
+				modelContextReductions += reduced
+			}
+			response, err := s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1", ProviderID: providerID, Model: model, Tools: availableTools, MaxTokens: modelOutputTokens, Budget: &effectiveBudget}, llmMessages, func(content string) {
 				s.broadcastTaskChunk(task.ID, session.ID, content)
 			})
 			if err != nil {
 				lower := strings.ToLower(err.Error())
 				if strings.Contains(lower, "tool") || strings.Contains(lower, "function") || strings.Contains(lower, "400") {
 					structuredTransportFallbacks++
-					response, err = s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1-fallback", ProviderID: providerID, Model: model, MaxTokens: modelOutputTokens}, llmMessages, func(content string) {
+					response, err = s.executor.ExecuteStepStream(modelCtx, gateway.Step{ID: "typed-agent-v1-fallback", ProviderID: providerID, Model: model, MaxTokens: modelOutputTokens, Budget: &effectiveBudget}, llmMessages, func(content string) {
 						s.broadcastTaskChunk(task.ID, session.ID, content)
 					})
 				}
@@ -1039,6 +1090,7 @@ a legitimate outcome and does not require a verification command.
 	runtimeEvidence["json_fallbacks"] = agentResult.JSONFallbacks
 	runtimeEvidence["native_tool_calls"] = nativeToolCalls
 	runtimeEvidence["structured_transport_fallbacks"] = structuredTransportFallbacks
+	runtimeEvidence["context_reductions"] = modelContextReductions
 	runtimeEvidence["action_transport"] = map[bool]string{true: "native-tool-calling", false: "versioned-structured-adapter"}[nativeToolCalls > 0]
 	runtimeEvidence["validation"] = map[string]any{
 		"schema_version": "1", "valid": err == nil, "fallback_count": agentResult.JSONFallbacks,
@@ -1269,11 +1321,19 @@ func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task 
 	if stage.Role == "qa" || stage.Role == "review" {
 		system += " Evaluate the supplied diff and verification evidence. End with exactly VERDICT: PASS or VERDICT: FAIL."
 	}
-	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_started", map[string]any{"stage": stage, "context_envelope_fingerprint": contextEnvelopeFingerprint})
+	providerType := "custom"
+	if id, parseErr := uuid.Parse(stage.ProviderID); parseErr == nil {
+		if selected, providerErr := s.providers.GetByID(ctx, id); providerErr == nil {
+			providerType = selected.ProviderType
+		}
+	}
+	budget := semcontext.ResolveModelBudget(providerType, stage.Model, stage.Role, s.cfg.Context.MaxTokens, s.cfg.Context.ReserveOutputTokens, stage.Capabilities)
+	stagePrompt, droppedTokens := fitStagePrompt(taskPrompt+"\n\n"+extraContext, system, budget.SafePromptTokens)
+	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_started", map[string]any{"stage": stage, "context_envelope_fingerprint": contextEnvelopeFingerprint, "context_budget": budget, "degraded_tokens": droppedTokens})
 	response, err := s.executor.ExecuteStepStream(
 		ctx,
-		gateway.Step{ID: stage.ID, ProviderID: stage.ProviderID, Model: stage.Model},
-		[]llm.Message{{Role: "system", Content: system}, {Role: "user", Content: taskPrompt + "\n\n" + extraContext}},
+		gateway.Step{ID: stage.ID, ProviderID: stage.ProviderID, Model: stage.Model, MaxTokens: budget.ReservedOutputTokens, Budget: &budget},
+		[]llm.Message{{Role: "system", Content: system}, {Role: "user", Content: stagePrompt}},
 		func(content string) { s.broadcastTaskChunk(task.ID, session.ID, "["+stage.Role+"] "+content) },
 	)
 	if err != nil {
@@ -1296,9 +1356,74 @@ func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task 
 	_ = s.appendRunEvent(ctx, run.ID, "workflow_stage_completed", map[string]any{
 		"stage": stage, "context_envelope_fingerprint": contextEnvelopeFingerprint,
 		"model": response.Model, "tokens_input": response.InputTokens,
-		"tokens_output": response.OutputTokens, "output": secretspkg.Redact(output),
+		"tokens_output": response.OutputTokens, "output": secretspkg.Redact(output), "context_budget": budget,
 	})
 	return output, nil
+}
+
+func fitStagePrompt(prompt, system string, safeTokens int) (string, int) {
+	requested := len([]rune(system))/4 + len([]rune(prompt))/4 + 8
+	if safeTokens <= 0 || requested <= safeTokens {
+		return prompt, 0
+	}
+	availableChars := (safeTokens - len([]rune(system))/4 - 16) * 4
+	if availableChars < 256 {
+		availableChars = 256
+	}
+	runes := []rune(prompt)
+	if len(runes) <= availableChars {
+		return prompt, 0
+	}
+	marker := "\n\n## Traced repository context"
+	prefix := prompt
+	if index := strings.Index(prompt, marker); index >= 0 {
+		prefix = prompt[:index]
+	}
+	prefixRunes := []rune(prefix)
+	if len(prefixRunes) > availableChars/2 {
+		prefixRunes = prefixRunes[:availableChars/2]
+	}
+	remaining := availableChars - len(prefixRunes)
+	if remaining < 0 {
+		remaining = 0
+	}
+	tail := runes[len(runes)-remaining:]
+	reduced := string(prefixRunes) + "\n\n[Context reduced deterministically to fit the selected model; omitted sources remain recorded in the context manifest.]\n\n" + string(tail)
+	return reduced, requested - safeTokens
+}
+
+func fitLLMMessages(messages []llm.Message, safeTokens int) ([]llm.Message, int) {
+	if len(messages) == 0 || safeTokens <= 0 {
+		return messages, 0
+	}
+	tokens := func(message llm.Message) int { return len([]rune(message.Content))/4 + 4 }
+	total := 0
+	for _, message := range messages {
+		total += tokens(message)
+	}
+	if total <= safeTokens {
+		return messages, 0
+	}
+	original := total
+	kept := make([]llm.Message, 0, len(messages))
+	remaining := safeTokens
+	if messages[0].Role == "system" {
+		kept = append(kept, messages[0])
+		remaining -= tokens(messages[0])
+	}
+	latest := messages[len(messages)-1]
+	if remaining < tokens(latest)+16 {
+		fitted, _ := fitStagePrompt(latest.Content, "", remaining-8)
+		latest.Content = fitted
+	}
+	summary := llm.Message{Role: "user", Content: "[Earlier conversation and tool observations were omitted to fit the selected model. Their evidence remains in the run record.]"}
+	if len(messages) > 2 && remaining > tokens(latest)+tokens(summary) {
+		kept = append(kept, summary)
+	}
+	if len(messages) > 1 || messages[0].Role != "system" {
+		kept = append(kept, latest)
+	}
+	return kept, original - safeTokens
 }
 
 // buildTaskResultReply creates a structured summary of what the agent did.

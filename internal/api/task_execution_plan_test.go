@@ -38,3 +38,20 @@ func TestValidateTaskExecutionPlanAcceptsSingleExplicitModel(t *testing.T) {
 		t.Fatalf("expected valid single-stage plan: %v", err)
 	}
 }
+
+func TestParseTaskExecutionPlanKeepsCapabilitySnapshot(t *testing.T) {
+	raw := json.RawMessage(`{"execution_plan":[{"id":"qa","role":"qa","provider_id":"local","model":"qwen","capabilities":{"context_window":8192,"max_output_tokens":512,"tool_overhead_tokens":128,"source":"probe"}}]}`)
+	stage := parseTaskExecutionPlan(raw)[0]
+	if stage.Capabilities == nil || stage.Capabilities.ContextWindow != 8192 || stage.Capabilities.Source != "probe" {
+		t.Fatalf("capability snapshot lost: %+v", stage)
+	}
+}
+
+func TestFitStagePromptReportsDeterministicReduction(t *testing.T) {
+	prompt := "task\n\n## Traced repository context\n" + string(make([]byte, 8000))
+	first, dropped := fitStagePrompt(prompt, "system", 300)
+	second, droppedAgain := fitStagePrompt(prompt, "system", 300)
+	if first != second || dropped <= 0 || dropped != droppedAgain {
+		t.Fatalf("reduction is not deterministic: %d/%d", dropped, droppedAgain)
+	}
+}

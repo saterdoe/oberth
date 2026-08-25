@@ -23,3 +23,20 @@ For an installed provider, use `oberth provider verify <provider-id>` to verify
 reachability and model discovery. That command is a connectivity check, not a
 capability certification. Provider/model capability evidence must be captured
 when a workflow stage starts and revalidated before fallback.
+
+## Context-budget policy
+
+Each workflow stage snapshots its provider, model, capability source, available
+input window, reserved output, tool-schema overhead, and safe prompt budget.
+Analysis, development, QA, and review may therefore reserve different output
+budgets in the same execution plan. Explicit capability metadata is accepted
+only when internally consistent; malformed or unknown metadata falls back to a
+visible conservative 4,096-token window.
+
+Before every provider attempt, including a fallback, Oberth validates the full
+message overlay against that attempt's snapshot. If the target window is
+smaller, earlier conversation/tool observations are replaced by a deterministic
+omission record and the latest prompt is bounded. The original evidence remains
+in the durable run record. Requested, available, reserved, reduced, input, and
+output token values are recorded separately; a fallback never inherits a larger
+model's prompt silently.

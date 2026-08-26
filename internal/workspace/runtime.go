@@ -116,12 +116,16 @@ func (w *Runtime) ApplyPatch(ctx context.Context, patch Patch) (ChangeSet, error
 	if err != nil {
 		return ChangeSet{}, err
 	}
-	if strings.Count(string(current), patch.OldText) != 1 {
+	oldText, newText := patch.OldText, patch.NewText
+	if strings.Count(string(current), oldText) == 0 {
+		oldText, newText = matchFileLineEndings(string(current), oldText, newText)
+	}
+	if strings.Count(string(current), oldText) != 1 {
 		return ChangeSet{}, fmt.Errorf("old_text must match exactly once")
 	}
 	id := uuid.NewString()
 	set, err := w.files.Apply(ctx, id, []Change{{
-		Path: patch.Path, Content: []byte(strings.Replace(string(current), patch.OldText, patch.NewText, 1)),
+		Path: patch.Path, Content: []byte(strings.Replace(string(current), oldText, newText, 1)),
 		ExpectedHash: patch.ExpectedHash,
 	}})
 	if err != nil {
@@ -131,6 +135,16 @@ func (w *Runtime) ApplyPatch(ctx context.Context, patch Patch) (ChangeSet, error
 	w.changes[id] = set
 	w.mu.Unlock()
 	return set, nil
+}
+
+func matchFileLineEndings(current, oldText, newText string) (string, string) {
+	if strings.Contains(current, "\r\n") && !strings.Contains(oldText, "\r\n") {
+		return strings.ReplaceAll(oldText, "\n", "\r\n"), strings.ReplaceAll(newText, "\n", "\r\n")
+	}
+	if !strings.Contains(current, "\r\n") && strings.Contains(oldText, "\r\n") {
+		return strings.ReplaceAll(oldText, "\r\n", "\n"), strings.ReplaceAll(newText, "\r\n", "\n")
+	}
+	return oldText, newText
 }
 
 func (w *Runtime) Run(ctx context.Context, command Command) (CommandResult, error) {

@@ -1,4 +1,4 @@
-.tour-launcher{width:30px;height:30px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--tertiary);cursor:pointer}.tour-launcher:hover{background:rgba(255,255,255,.06);color:var(--label)}
+.tour-launcher{cursor:pointer}
 .tour-backdrop{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.54)}
 .tour-dialog{width:min(480px,100%);max-height:calc(100dvh - 32px);overflow:auto}.tour-card{width:100%;overflow:hidden;border:1px solid var(--separator-strong);border-radius:10px;background:var(--surface);box-shadow:0 18px 50px rgba(0,0,0,.38)}
 .tour-card>header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--separator)}.tour-kicker{font:600 13px var(--sans);color:var(--label)}.tour-card>header button{width:28px;height:28px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--tertiary);cursor:pointer}.tour-card>header button:hover{background:rgba(255,255,255,.06);color:var(--label)}

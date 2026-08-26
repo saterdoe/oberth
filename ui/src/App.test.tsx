@@ -89,6 +89,7 @@ describe('task workspace', () => {
   it('supports discoverable workspace shortcuts without hijacking editors', async () => {
     render(<App />)
     await screen.findByRole('button',{name:'Dashboard'})
+    expect(screen.getByRole('button',{name:'Open guided tour'})).toHaveTextContent('Guided tour')
 
     fireEvent.keyDown(document,{key:'?',shiftKey:true})
     expect(screen.getByRole('dialog',{name:'Keyboard shortcuts'})).toBeInTheDocument()

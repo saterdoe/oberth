@@ -4,7 +4,7 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-## 0.1.0-alpha.9 - 2026-08-25
+## 0.1.0-alpha.9 - 2026-08-26
 
 ### Added
 
@@ -30,6 +30,15 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 - Code Map extraction is resource-bounded and local-only; graph API responses
   omit source, snippets, vectors and absolute paths. Untrusted labels are
   sanitized and the desktop UI declares a restrictive content-security policy.
+
+### Fixed
+
+- Local-model file replacements now tolerate Windows CRLF versus model-generated
+  LF line endings while preserving the file's existing convention.
+- Allowlisted verification commands remain safely executable when a local model
+  places the complete argument vector in the typed `program` field.
+- The sidebar exposes one consistently labeled guided-tour action instead of an
+  unlabeled duplicate help icon, with corrected English and Spanish copy.
 
 ### Limitations
 

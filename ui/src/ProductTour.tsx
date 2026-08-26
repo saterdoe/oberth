@@ -1,5 +1,5 @@
 import {useState} from 'react'
-import {ArrowLeft,ArrowRight,BookOpen,Check,HelpCircle,Settings,SquareTerminal,X} from 'lucide-react'
+import {ArrowLeft,ArrowRight,BookOpen,Check,Compass,Settings,SquareTerminal,X} from 'lucide-react'
 import Modal from './Modal'
 import {MessageKey,useI18n} from './i18n'
 import './product-tour.css'
@@ -26,7 +26,7 @@ export default function ProductTour({onNavigate}:{onNavigate:(target:TourTarget)
   const move=(next:number)=>{setIndex(next);onNavigate(steps[next].target)}
 
   return <>
-    <button className="tour-launcher" aria-label={t('tour.open')} title={t('tour.title')} onClick={show}><HelpCircle size={15}/></button>
+    <button className="side-icon tour-launcher" aria-label={t('tour.open')} onClick={show}><Compass size={15}/><span className="side-label">{t('tour.launcher')}</span></button>
     <Modal open={open} label={t('tour.title')} onClose={()=>close()} backdropClassName="tour-backdrop" dialogClassName="tour-dialog">
       <section className="tour-card">
         <header><span className="tour-kicker">{t('tour.title')}</span><button aria-label={t('tour.close')} onClick={()=>close()}><X size={15}/></button></header>

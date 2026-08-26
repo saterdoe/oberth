@@ -149,6 +149,7 @@ func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, run
 		if json.Unmarshal(action.Arguments, &args) != nil {
 			return fail(fmt.Errorf("command is not in the verification allowlist"))
 		}
+		args.Program, args.Args = normalizeAgentCommand(args.Program, args.Args)
 		if strings.EqualFold(strings.TrimSpace(args.Program), "git") && len(args.Args) == 1 && strings.TrimSpace(args.Args[0]) == "diff --check" {
 			args.Args = []string{"diff", "--check"}
 		}
@@ -196,6 +197,21 @@ func executeTypedTool(ctx context.Context, workspace workspacepkg.Workspace, run
 		return fail(fmt.Errorf("unsupported tool %q", action.Tool))
 	}
 	return observation
+}
+
+func normalizeAgentCommand(program string, args []string) (string, []string) {
+	program = strings.TrimSpace(program)
+	if len(args) != 0 || !strings.ContainsAny(program, " \t\r\n") {
+		return program, args
+	}
+	// Some small local models put the complete argv in program despite the
+	// typed schema. Split it without invoking a shell; the resulting executable
+	// and arguments still have to pass safeAgentCommand's strict allowlist.
+	fields := strings.Fields(program)
+	if len(fields) < 2 || !safeAgentCommand(fields[0], fields[1:]) {
+		return program, args
+	}
+	return fields[0], fields[1:]
 }
 
 func normalizeLegacyReasoningArguments(raw json.RawMessage) json.RawMessage {

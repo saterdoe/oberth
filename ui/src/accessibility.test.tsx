@@ -29,7 +29,7 @@ it('has no serious WCAG violations across critical workspaces and dialogs',async
   await audit('dashboard')
   fireEvent.click(screen.getByRole('button',{name:'Session'}))
   await audit('session')
-  fireEvent.click(screen.getByRole('button',{name:'Open product tour'}))
+  fireEvent.click(screen.getByRole('button',{name:'Open guided tour'}))
   await screen.findByRole('dialog',{name:'Product tour'})
   await audit('product tour dialog')
 })

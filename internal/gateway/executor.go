@@ -399,11 +399,12 @@ func (e *StepExecutor) ExecuteStep(ctx context.Context, step Step, messages []ll
 			e.emitFallback(ctx, step.ID, chain, i, err)
 			continue
 		}
+		attemptMessages, attemptMaxTokens, attemptTools := prepareAttempt(step, i, messages)
 		resp, err := e.executeAdaptive(ctx, step.ID, link.providerID, link.model, provider, llm.ChatRequest{
 			Model:     link.model,
-			Messages:  messages,
-			Tools:     step.Tools,
-			MaxTokens: step.MaxTokens,
+			Messages:  attemptMessages,
+			Tools:     attemptTools,
+			MaxTokens: attemptMaxTokens,
 		})
 
 		if err != nil {
@@ -421,7 +422,7 @@ func (e *StepExecutor) ExecuteStep(ctx context.Context, step Step, messages []ll
 			continue
 		}
 
-		normalizeTokenUsage(resp, messages)
+		normalizeTokenUsage(resp, attemptMessages)
 		return resp, nil
 	}
 
@@ -475,8 +476,9 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 			err    error
 		}
 		streamReady := make(chan streamResult, 1)
+		attemptMessages, attemptMaxTokens, _ := prepareAttempt(step, index, messages)
 		go func() {
-			stream, streamErr := provider.ChatStream(attemptCtx, llm.ChatRequest{Model: link.model, Messages: messages, MaxTokens: step.MaxTokens})
+			stream, streamErr := provider.ChatStream(attemptCtx, llm.ChatRequest{Model: link.model, Messages: attemptMessages, MaxTokens: attemptMaxTokens})
 			streamReady <- streamResult{stream: stream, err: streamErr}
 		}()
 		inactivity := time.NewTimer(timeout)
@@ -548,14 +550,14 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 		}
 		if content.Len() == 0 {
 			fallbackCtx, fallbackCancel := context.WithTimeout(ctx, timeout)
-			response, fallbackErr := e.executeChat(fallbackCtx, link.providerID, provider, llm.ChatRequest{Model: link.model, Messages: messages, MaxTokens: step.MaxTokens})
+			response, fallbackErr := e.executeChat(fallbackCtx, link.providerID, provider, llm.ChatRequest{Model: link.model, Messages: attemptMessages, MaxTokens: attemptMaxTokens})
 			fallbackCancel()
 			if fallbackErr != nil {
 				attempts = append(attempts, Attempt{Provider: link.providerID, Model: link.model, Err: fallbackErr})
 				e.emitFallback(ctx, step.ID, chain, index, fallbackErr)
 				continue
 			}
-			normalizeTokenUsage(response, messages)
+			normalizeTokenUsage(response, attemptMessages)
 			if onChunk != nil && response.Content != "" {
 				onChunk(response.Content)
 			}
@@ -563,10 +565,73 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 		}
 		e.recordProviderSuccess(link.providerID)
 		response := &llm.ChatResponse{Model: link.model, Content: content.String()}
-		normalizeTokenUsage(response, messages)
+		normalizeTokenUsage(response, attemptMessages)
 		return response, nil
 	}
 	return nil, &FallbackError{Tried: attempts}
+}
+
+func prepareAttempt(step Step, index int, messages []llm.Message) ([]llm.Message, int, []llm.ToolDefinition) {
+	candidate := step
+	if index > 0 && index-1 < len(step.Fallbacks) {
+		candidate = step.Fallbacks[index-1]
+	}
+	maxTokens, tools := candidate.MaxTokens, candidate.Tools
+	if maxTokens <= 0 {
+		maxTokens = step.MaxTokens
+	}
+	if len(tools) == 0 {
+		tools = step.Tools
+	}
+	if candidate.Budget == nil {
+		return messages, maxTokens, tools
+	}
+	if candidate.Budget.ReservedOutputTokens > 0 && (maxTokens <= 0 || maxTokens > candidate.Budget.ReservedOutputTokens) {
+		maxTokens = candidate.Budget.ReservedOutputTokens
+	}
+	return fitAttemptMessages(messages, candidate.Budget.SafePromptTokens), maxTokens, tools
+}
+
+func fitAttemptMessages(messages []llm.Message, safeTokens int) []llm.Message {
+	if safeTokens <= 0 {
+		return messages
+	}
+	total := 0
+	for _, message := range messages {
+		total += len([]rune(message.Content))/4 + 4
+	}
+	if total <= safeTokens {
+		return messages
+	}
+	result := make([]llm.Message, 0, 3)
+	remainingChars := (safeTokens - 16) * 4
+	if remainingChars < 128 {
+		remainingChars = 128
+	}
+	if len(messages) > 0 && messages[0].Role == "system" {
+		system := messages[0]
+		systemRunes := []rune(system.Content)
+		systemLimit := remainingChars / 2
+		if len(systemRunes) > systemLimit {
+			system.Content = string(systemRunes[:systemLimit]) + "\n[System contract truncated for fallback budget; attempt is capability-degraded.]"
+		}
+		result = append(result, system)
+		remainingChars -= len([]rune(system.Content))
+	}
+	latest := messages[len(messages)-1]
+	limit := remainingChars - 96
+	if limit < 128 {
+		limit = 128
+	}
+	runes := []rune(latest.Content)
+	if len(runes) > limit {
+		latest.Content = "[Context reduced for fallback model.]\n" + string(runes[len(runes)-limit:])
+	}
+	if len(messages) > 2 && remainingChars-len([]rune(latest.Content)) >= 96 {
+		result = append(result, llm.Message{Role: "user", Content: "[Earlier messages omitted for fallback budget; see run evidence.]"})
+	}
+	result = append(result, latest)
+	return result
 }
 
 func resetTimer(timer *time.Timer, duration time.Duration) {

@@ -1,6 +1,6 @@
 # Quickstart
 
-Oberth 0.1.0-alpha.8 is a Public Alpha. Use a test repository or one with a
+Oberth 0.1.0-alpha.9 is a Public Alpha. Use a test repository or one with a
 clean backup, and review every generated change before approval.
 
 ## Requirements
@@ -81,6 +81,8 @@ configuration before starting a task.
 
 Provider compatibility varies by model. A successful chat response does not
 guarantee reliable tool use or completion of a coding task.
+See the maintained [provider compatibility matrix](PROVIDER_COMPATIBILITY.md)
+for the capability contract, limitations, and deterministic local test scope.
 
 ## Run and review a task
 

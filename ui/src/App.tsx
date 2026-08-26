@@ -32,6 +32,10 @@ type MemoryCandidate = { id:string;kind:string;claim_id?:string;content:string;s
 type RouteRule = { id:string; priority?:number; name?:string; match_repo_pattern?:string; match_task_type?:string; provider_id?:string; model?:string; is_active?:boolean }
 type Project = { id:string; name:string; path:string }
 type CodeIndexStatus = {schema_version:string;repo_id:string;indexed_files:number;chunk_count:number;last_indexed?:string;fresh:boolean;last_error?:string}
+type CodeMapNode = {id:string;repo_id:string;kind:'repository'|'directory'|'file'|'external_package';label:string;path?:string;language?:string;schema_version:string}
+type CodeMapEdge = {id:string;source_id:string;target_id:string;kind:'contains'|'imports';source_path:string;range:{start_line:number;end_line:number};extractor:string;confidence:'exact'|'extracted';resolution:string}
+type CodeMapResult = {schema_version:string;repo_id:string;fingerprint:string;nodes:CodeMapNode[];edges:CodeMapEdge[];coverage:{languages:Record<string,number>;node_count:number;edge_count:number};truncated:boolean;remaining:number;next_cursor?:string;last_indexed?:string;fresh:boolean}
+type CodeMapDraft = {projectID:string;prompt:string;fingerprint:string;nodeIDs:string[];edgeIDs:string[]}
 type PickedRepository = { canceled:boolean; name?:string; path?:string }
 type DiffFile = { path:string; status:string; content:string }
 type PromotionReadiness = { ready:boolean; reason?:string }
@@ -45,7 +49,7 @@ export type ReasoningCase = {schema_version:string;records:ReasoningRecord[];evi
 type Tab = 'dash'|'sess'|'vault'|'routes'|'costs'|'settings'
 const authHeaders=():Record<string,string> => apiToken() ? {Authorization:`Bearer ${apiToken()}`} : {}
 
-async function api<T>(path:string):Promise<T> {
+export async function api<T>(path:string):Promise<T> {
   const url=`${apiBase()}/api/v1${path}`
   const response = apiToken() ? await fetch(url,{headers:authHeaders()}) : await fetch(url)
   if (!response.ok) throw new Error(`API ${response.status}`)
@@ -98,6 +102,7 @@ export default function App() {
   const [loadFailures,setLoadFailures] = useState(0)
   const [hasLoaded,setHasLoaded] = useState(false)
   const [shortcutsOpen,setShortcutsOpen] = useState(false)
+  const [codeMapDraft,setCodeMapDraft] = useState<CodeMapDraft>()
 
   const load=async()=>{
       const result=await Promise.allSettled([
@@ -178,11 +183,11 @@ export default function App() {
       </aside>
       <div className="content-frame">
         {tab==='dash'&&<DashboardAdmin status={status} loaded={hasLoaded} providers={providers} costs={costs} session={activeSession} sessions={sessions} tasks={tasks} onNewTask={()=>setTab('sess')} onOpenTask={id=>{setTaskToOpen(id);setTab('sess')}}/>}
-        {tab==='sess'&&<TaskWorkspace tasks={tasks} sessions={sessions} runs={runs} projects={projects} providers={providers} launchers={launchers} taskStreams={taskStreams} initialTaskID={taskToOpen} onChanged={load} onOpenSettings={()=>setTab('settings')}/>}
+        {tab==='sess'&&<TaskWorkspace tasks={tasks} sessions={sessions} runs={runs} projects={projects} providers={providers} launchers={launchers} taskStreams={taskStreams} initialTaskID={taskToOpen} codeMapDraft={codeMapDraft} onCodeMapDraftConsumed={()=>setCodeMapDraft(undefined)} onChanged={load} onOpenSettings={()=>setTab('settings')}/>}
         {tab==='vault'&&<VaultPanel notes={notes} candidates={memoryCandidates} onChanged={load}/>}
         {tab==='routes'&&<RoutesPanel routes={routes} providers={providers} tasks={tasks} onChanged={load}/>}
         {tab==='costs'&&<CostsPanel costs={costs} sessions={sessions} providers={providers}/>} 
-        {tab==='settings'&&<SettingsView providers={providers} projects={projects} onChanged={load}/>}
+        {tab==='settings'&&<SettingsView providers={providers} projects={projects} onChanged={load} onAskCodeMap={draft=>{setCodeMapDraft(draft);setTab('sess')}}/>}
       </div>
     </div>
     <StatusBar connected={connected} status={status} providers={providers}/>
@@ -251,7 +256,7 @@ function modelHasCertifiedTools(provider:Provider|undefined,model:string){
 function HealthLine({label,ok,value}:{label:string;ok:boolean;value:string}){return <div className="health-line"><span><Dot color={ok?'var(--ok)':'var(--err)'}/>{label}</span><b className={ok?'ok':''}>{value}</b></div>}
 function relativeDate(value:string){if(!value)return '—';const m=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/60000));return m<1?'now':m<60?`${m}m ago`:m<1440?`${Math.floor(m/60)}h ago`:`${Math.floor(m/1440)}d ago`}
 
-function TaskWorkspace({tasks,sessions,runs,projects,providers,launchers,taskStreams,initialTaskID,onChanged,onOpenSettings}:{tasks:Task[];sessions:Session[];runs:Run[];projects:Project[];providers:Provider[];launchers:Launcher[];taskStreams:Record<string,string>;initialTaskID:string;onChanged:()=>Promise<void>;onOpenSettings:()=>void}){
+function TaskWorkspace({tasks,sessions,runs,projects,providers,launchers,taskStreams,initialTaskID,codeMapDraft,onCodeMapDraftConsumed,onChanged,onOpenSettings}:{tasks:Task[];sessions:Session[];runs:Run[];projects:Project[];providers:Provider[];launchers:Launcher[];taskStreams:Record<string,string>;initialTaskID:string;codeMapDraft?:CodeMapDraft;onCodeMapDraftConsumed:()=>void;onChanged:()=>Promise<void>;onOpenSettings:()=>void}){
   const {t}=useI18n()
   const [selected,setSelected]=useState<string>('')
   const [intention,setIntention]=useState('')
@@ -270,8 +275,10 @@ function TaskWorkspace({tasks,sessions,runs,projects,providers,launchers,taskStr
   const [simpleModel,setSimpleModel]=useState('')
   const [workflow,setWorkflow]=useState<WorkflowStage[]>([])
   const [refreshingLocalModels,setRefreshingLocalModels]=useState(false)
+  const [codeMapContext,setCodeMapContext]=useState<Omit<CodeMapDraft,'projectID'|'prompt'>>()
   const [composerOpen,setComposerOpen]=useState(true)
   const intentionRef=useRef<HTMLTextAreaElement>(null)
+  useEffect(()=>{if(!codeMapDraft)return;setProjectID(codeMapDraft.projectID);setIntention(codeMapDraft.prompt);setCodeMapContext({fingerprint:codeMapDraft.fingerprint,nodeIDs:codeMapDraft.nodeIDs,edgeIDs:codeMapDraft.edgeIDs});setComposerOpen(true);window.setTimeout(()=>intentionRef.current?.focus(),0);onCodeMapDraftConsumed()},[codeMapDraft]) // eslint-disable-line react-hooks/exhaustive-deps
   const taskDetailRef=useRef<HTMLDivElement>(null)
   const openedInitialTaskRef=useRef('')
   const refreshedLocalModels=useRef(false)
@@ -438,7 +445,7 @@ function TaskWorkspace({tasks,sessions,runs,projects,providers,launchers,taskStr
     }catch(e){setError(e instanceof Error?e.message:String(e))}
     finally{setBusy(false)}
   }
-  const createTask=async()=>{if(!intention.trim()||!selectedProject||!workflowValid||!simpleConfigured)return;setBusy(true);setError('');try{const text=intention.trim(),lower=text.toLowerCase();const kind=lower.includes('review')||lower.includes('revis')?'review':lower.includes('bug')||lower.includes('corrige')||lower.includes('fix')?'bug_fix':lower.includes('document')||lower.includes('readme')?'docs':lower.includes('arquitect')?'architecture':'implementation';const simplePlan=simpleProvider&&simpleModel?[{id:'development',role:'development' as const,provider_id:simpleProvider.id,model:simpleModel}]:[];const constraints=advanced?{execution_plan:workflow}:simplePlan.length?{execution_plan:simplePlan}:[];const made=await mutate<Task>('/tasks','POST',{repository_id:selectedProject.id,title:text.length>72?`${text.slice(0,69)}...`:text,description:text,task_type:kind,constraints});setSelected(made.id);setIntention('');await onChanged();try{await mutate(`/tasks/${made.id}/run`)}catch(runError){const detail=runError instanceof Error?runError.message:String(runError);setError(detail.includes('no active provider')?'La tarea quedó guardada, pero todavía no puede ejecutarse: configurá un proveedor activo.':detail)}await onChanged()}catch(e){setError(e instanceof Error?e.message:String(e));await onChanged()}finally{setBusy(false)}}
+  const createTask=async()=>{if(!intention.trim()||!selectedProject||!workflowValid||!simpleConfigured)return;setBusy(true);setError('');try{const text=intention.trim(),lower=text.toLowerCase();const kind=lower.includes('review')||lower.includes('revis')?'review':lower.includes('bug')||lower.includes('corrige')||lower.includes('fix')?'bug_fix':lower.includes('document')||lower.includes('readme')?'docs':lower.includes('arquitect')?'architecture':'implementation';const simplePlan=simpleProvider&&simpleModel?[{id:'development',role:'development' as const,provider_id:simpleProvider.id,model:simpleModel}]:[];const executionPlan=advanced?workflow:simplePlan;const constraints=codeMapContext?{execution_plan:executionPlan,code_map_context:{schema_version:'1',fingerprint:codeMapContext.fingerprint,node_ids:codeMapContext.nodeIDs,edge_ids:codeMapContext.edgeIDs}}:executionPlan.length?{execution_plan:executionPlan}:[];const made=await mutate<Task>('/tasks','POST',{repository_id:selectedProject.id,title:text.length>72?`${text.slice(0,69)}...`:text,description:text,task_type:kind,constraints});setSelected(made.id);setIntention('');setCodeMapContext(undefined);await onChanged();try{await mutate(`/tasks/${made.id}/run`)}catch(runError){const detail=runError instanceof Error?runError.message:String(runError);setError(detail.includes('no active provider')?'La tarea quedó guardada, pero todavía no puede ejecutarse: configurá un proveedor activo.':detail)}await onChanged()}catch(e){setError(e instanceof Error?e.message:String(e));await onChanged()}finally{setBusy(false)}}
   const create=async(e:React.FormEvent)=>{e.preventDefault();void createTask()}
   const prepareNextChange=()=>{
     if(task?.repository_id)setProjectID(task.repository_id)
@@ -696,8 +703,8 @@ function CostsPanel({costs,sessions,providers}:{costs:CostSummary;sessions:Sessi
   </section>
 }
 
-function SettingsView({providers,projects,onChanged}:{providers:Provider[];projects:Project[];onChanged:()=>Promise<void>}){
-  return <main className="panel settings-view"><ContextHelp topic="configuration"/><LanguageSettings/><CodeIndexSettings projects={projects}/><SemanticSearchSettings onChanged={onChanged}/><SettingsPanel providers={providers} onChanged={onChanged}/></main>
+function SettingsView({providers,projects,onChanged,onAskCodeMap}:{providers:Provider[];projects:Project[];onChanged:()=>Promise<void>;onAskCodeMap:(draft:CodeMapDraft)=>void}){
+  return <main className="panel settings-view"><ContextHelp topic="configuration"/><LanguageSettings/><CodeIndexSettings projects={projects} onAsk={onAskCodeMap}/><SemanticSearchSettings onChanged={onChanged}/><SettingsPanel providers={providers} onChanged={onChanged}/></main>
 }
 
 function LanguageSettings(){
@@ -710,16 +717,38 @@ function DiffPreview({content}:{content:string}){
   return <pre className="output-box diff-content">{lines.map((line,index)=>{const kind=line.startsWith('+++')||line.startsWith('---')||line.startsWith('diff --git')||line.startsWith('index ')||line.startsWith('@@')?'meta':line.startsWith('+')?'add':line.startsWith('-')?'del':line.startsWith('\\')?'notice':'context';return <span className={`diff-line diff-${kind}`} key={index}>{line||' '}{index<lines.length-1?'\n':''}</span>})}</pre>
 }
 
-function CodeIndexSettings({projects}:{projects:Project[]}){
+function CodeIndexSettings({projects,onAsk}:{projects:Project[];onAsk:(draft:CodeMapDraft)=>void}){
   const{t,locale}=useI18n()
   const [states,setStates]=useState<Record<string,CodeIndexStatus>>({}),[busy,setBusy]=useState(''),[message,setMessage]=useState('')
   const [visibleCount,setVisibleCount]=useState(4)
+  const [explorer,setExplorer]=useState<Project|null>(null)
   const visibleProjects=projects.slice(0,visibleCount)
   useEffect(()=>setVisibleCount(current=>Math.max(4,Math.min(current,Math.max(4,projects.length)))),[projects.length])
   const refresh=async()=>{const pairs=await Promise.all(projects.map(async project=>{try{return [project.id,await api<CodeIndexStatus>(`/projects/${project.id}/code-index`)] as const}catch{return [project.id,undefined] as const}}));setStates(Object.fromEntries(pairs.filter((pair):pair is readonly [string,CodeIndexStatus]=>Boolean(pair[1]))))}
   useEffect(()=>{void refresh()},[projects.map(project=>project.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
   const reindex=async(project:Project)=>{setBusy(project.id);setMessage(t('codeIndex.indexingProject',{project:project.name}));try{const result=await mutate<{status:CodeIndexStatus}>(`/projects/${project.id}/code-index/reindex`);setStates(current=>({...current,[project.id]:result.status}));setMessage(t('codeIndex.updated',{project:project.name}))}catch(error){setMessage(error instanceof Error?error.message:String(error))}finally{setBusy('')}}
-  return <section className="semantic-settings-card"><div><Label>{t('codeIndex.title')}</Label><p>{t('codeIndex.description')}</p><div id="code-index-projects" className="local-candidates" aria-label={t('codeIndex.listLabel')}>{visibleProjects.map(project=>{const state=states[project.id];return <div className="local-candidate" key={project.id}><div><strong><Dot color={state?.fresh?'var(--ok)':state?.chunk_count?'var(--warn)':'var(--t3)'}/>{project.name}<span className="provider-badge">{state?.fresh?t('codeIndex.current'):state?.chunk_count?t('codeIndex.stale'):t('codeIndex.missing')}</span></strong><span>{state?t('codeIndex.counts',{files:state.indexed_files,chunks:state.chunk_count}):t('codeIndex.unavailable')}</span>{state?.last_indexed&&<code>{t('codeIndex.lastIndexed',{date:new Date(state.last_indexed).toLocaleString(locale==='es'?'es-AR':'en-US')})}</code>}{state?.last_error&&<small className="memory-warning" data-no-translate>{state.last_error}</small>}</div><button disabled={busy===project.id} onClick={()=>void reindex(project)}>{busy===project.id?t('codeIndex.indexing'):state?.chunk_count?t('codeIndex.reindex'):t('codeIndex.indexNow')}</button></div>})}{!projects.length&&<CompactEmpty text={t('codeIndex.empty')} detail={t('codeIndex.emptyDetail')}/>}</div>{projects.length>4&&<div className="code-index-pagination"><span aria-live="polite">{t('codeIndex.showing',{visible:visibleProjects.length,total:projects.length})}</span>{visibleProjects.length<projects.length?<button type="button" aria-expanded="false" aria-controls="code-index-projects" onClick={()=>setVisibleCount(current=>Math.min(current+4,projects.length))}>{t('codeIndex.showMore',{count:Math.min(4,projects.length-visibleProjects.length)})}</button>:<button type="button" aria-expanded="true" aria-controls="code-index-projects" onClick={()=>setVisibleCount(4)}>{t('codeIndex.showLess')}</button>}</div>}{message&&<p aria-live="polite">{message}</p>}</div></section>
+  return <section className="semantic-settings-card"><div><Label>{t('codeIndex.title')}</Label><p>{t('codeIndex.description')}</p><div id="code-index-projects" className="local-candidates" aria-label={t('codeIndex.listLabel')}>{visibleProjects.map(project=>{const state=states[project.id];return <div className="local-candidate" key={project.id}><div><strong><Dot color={state?.fresh?'var(--ok)':state?.chunk_count?'var(--warn)':'var(--t3)'}/>{project.name}<span className="provider-badge">{state?.fresh?t('codeIndex.current'):state?.chunk_count?t('codeIndex.stale'):t('codeIndex.missing')}</span></strong><span>{state?t('codeIndex.counts',{files:state.indexed_files,chunks:state.chunk_count}):t('codeIndex.unavailable')}</span>{state?.last_indexed&&<code>{t('codeIndex.lastIndexed',{date:new Date(state.last_indexed).toLocaleString(locale==='es'?'es-AR':'en-US')})}</code>}{state?.last_error&&<small className="memory-warning" data-no-translate>{state.last_error}</small>}</div><div className="code-index-actions"><button type="button" disabled={!state?.chunk_count} onClick={()=>setExplorer(project)}>{t('codeMap.explore')}</button><button disabled={busy===project.id} onClick={()=>void reindex(project)}>{busy===project.id?t('codeIndex.indexing'):state?.chunk_count?t('codeIndex.reindex'):t('codeIndex.indexNow')}</button></div></div>})}{!projects.length&&<CompactEmpty text={t('codeIndex.empty')} detail={t('codeIndex.emptyDetail')}/>}</div>{projects.length>4&&<div className="code-index-pagination"><span aria-live="polite">{t('codeIndex.showing',{visible:visibleProjects.length,total:projects.length})}</span>{visibleProjects.length<projects.length?<button type="button" aria-expanded="false" aria-controls="code-index-projects" onClick={()=>setVisibleCount(current=>Math.min(current+4,projects.length))}>{t('codeIndex.showMore',{count:Math.min(4,projects.length-visibleProjects.length)})}</button>:<button type="button" aria-expanded="true" aria-controls="code-index-projects" onClick={()=>setVisibleCount(4)}>{t('codeIndex.showLess')}</button>}</div>}{message&&<p aria-live="polite">{message}</p>}</div>{explorer&&<CodeMapExplorer project={explorer} onClose={()=>setExplorer(null)} onAsk={onAsk}/>}</section>
+}
+
+function CodeMapExplorer({project,onClose,onAsk}:{project:Project;onClose:()=>void;onAsk:(draft:CodeMapDraft)=>void}){
+  const {t,locale}=useI18n()
+  const [query,setQuery]=useState(''),[nodes,setNodes]=useState<CodeMapNode[]>([]),[selected,setSelected]=useState<CodeMapNode>(),[result,setResult]=useState<CodeMapResult>(),[mode,setMode]=useState<'graph'|'table'>('graph'),[direction,setDirection]=useState<'both'|'incoming'|'outgoing'>('both'),[busy,setBusy]=useState(false),[error,setError]=useState('')
+  const loadNodes=async(search='')=>{setBusy(true);setError('');try{const response=await api<CodeMapResult>(`/projects/${project.id}/code-map/nodes?limit=30&query=${encodeURIComponent(search)}`);setNodes(response.nodes||[]);if(!response.nodes?.length)setSelected(undefined)}catch(err){setError(err instanceof Error?err.message:String(err))}finally{setBusy(false)}}
+  const loadNeighborhood=async(node:CodeMapNode,nextDirection=direction)=>{setBusy(true);setError('');setSelected(node);try{setResult(await api<CodeMapResult>(`/projects/${project.id}/code-map/neighborhood?node_id=${encodeURIComponent(node.id)}&direction=${nextDirection}&limit=100`))}catch(err){setError(err instanceof Error?err.message:String(err));setResult(undefined)}finally{setBusy(false)}}
+  useEffect(()=>{void loadNodes()},[project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const nodeByID=useMemo(()=>Object.fromEntries((result?.nodes||[]).map(node=>[node.id,node])),[result])
+  const incoming=(result?.edges||[]).filter(edge=>edge.target_id===selected?.id),outgoing=(result?.edges||[]).filter(edge=>edge.source_id===selected?.id)
+  const chooseDirection=(value:'both'|'incoming'|'outgoing')=>{setDirection(value);if(selected)void loadNeighborhood(selected,value)}
+  const ask=()=>{if(!selected||!result)return;onAsk({projectID:project.id,prompt:t('codeMap.askPrompt',{name:selected.label,path:selected.path||selected.kind}),fingerprint:result.fingerprint,nodeIDs:result.nodes.map(node=>node.id),edgeIDs:result.edges.map(edge=>edge.id)});onClose()}
+  return <Modal open label={t('codeMap.title')} onClose={onClose} backdropClassName="code-map-backdrop" dialogClassName="code-map-dialog"><header><div><strong>{t('codeMap.title')}</strong><span data-no-translate>{project.name}</span></div><button type="button" aria-label={t('codeMap.close')} onClick={onClose}>×</button></header><div className="code-map-toolbar"><form onSubmit={event=>{event.preventDefault();void loadNodes(query)}}><label htmlFor="code-map-search">{t('codeMap.search')}</label><div><input id="code-map-search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('codeMap.searchPlaceholder')}/><button type="submit" disabled={busy}><Search size={15}/>{t('codeMap.searchAction')}</button></div></form><div className="code-map-toggles" role="group" aria-label={t('codeMap.view')}><button type="button" aria-pressed={mode==='graph'} onClick={()=>setMode('graph')}>{t('codeMap.graph')}</button><button type="button" aria-pressed={mode==='table'} onClick={()=>setMode('table')}>{t('codeMap.table')}</button></div></div><div className="code-map-body"><aside aria-label={t('codeMap.results')}><strong>{t('codeMap.results')}</strong>{busy&&!nodes.length&&<span>{t('codeMap.loading')}</span>}<div className="code-map-node-list">{nodes.map(node=><button type="button" key={node.id} className={selected?.id===node.id?'active':''} onClick={()=>void loadNeighborhood(node)}><span data-no-translate>{node.label}</span><small data-no-translate>{node.path||node.kind}</small></button>)}</div>{!busy&&!nodes.length&&!error&&<span>{t('codeMap.noNodes')}</span>}</aside><main>{error&&<p role="alert" className="memory-warning">{t('codeMap.error')} <span data-no-translate>{error}</span></p>}{selected&&<><section className="code-map-summary"><div><strong data-no-translate>{selected.label}</strong><span data-no-translate>{selected.path||selected.kind}</span></div><div className="code-map-summary-actions"><label>{t('codeMap.direction')}<select value={direction} onChange={event=>chooseDirection(event.target.value as typeof direction)}><option value="both">{t('codeMap.both')}</option><option value="incoming">{t('codeMap.incoming')}</option><option value="outgoing">{t('codeMap.outgoing')}</option></select></label><button type="button" disabled={!result||busy} onClick={ask}>{t('codeMap.ask')}</button></div></section>{result&&<div className="code-map-freshness"><span className={result.fresh?'ok':'warn'}>{result.fresh?t('codeMap.current'):t('codeMap.stale')}</span><span>{t('codeMap.indexed',{date:result.last_indexed?new Date(result.last_indexed).toLocaleString(locale==='es'?'es-AR':'en-US'):'—'})}</span><span>{t('codeMap.coverage',{nodes:result.coverage.node_count,edges:result.coverage.edge_count})}</span>{result.truncated&&<span>{t('codeMap.truncated',{count:result.remaining})}</span>}</div>}{result&&(mode==='graph'?<div className="code-map-graph" aria-label={t('codeMap.graph')}><RelationshipColumn title={t('codeMap.incoming')} edges={incoming} side="incoming" nodes={nodeByID}/><div className="code-map-center"><span>{t('codeMap.selected')}</span><strong data-no-translate>{selected.label}</strong></div><RelationshipColumn title={t('codeMap.outgoing')} edges={outgoing} side="outgoing" nodes={nodeByID}/></div>:<RelationshipTable edges={result.edges} nodes={nodeByID} t={t}/>)}</>}{!selected&&!error&&<div className="code-map-empty"><Search/><strong>{t('codeMap.choose')}</strong><span>{t('codeMap.chooseDetail')}</span></div>}</main></div></Modal>
+}
+
+function RelationshipColumn({title,edges,side,nodes}:{title:string;edges:CodeMapEdge[];side:'incoming'|'outgoing';nodes:Record<string,CodeMapNode>}){
+  return <section className="code-map-column"><strong>{title}</strong>{edges.map(edge=>{const node=nodes[side==='incoming'?edge.source_id:edge.target_id];return <article key={edge.id}><b data-no-translate>{node?.label||'—'}</b><span>{edge.kind} · {edge.confidence}</span><small data-no-translate>{edge.source_path}:{edge.range.start_line}</small><small data-no-translate>{edge.resolution}</small></article>})}{!edges.length&&<span>—</span>}</section>
+}
+
+function RelationshipTable({edges,nodes,t}:{edges:CodeMapEdge[];nodes:Record<string,CodeMapNode>;t:ReturnType<typeof useI18n>['t']}){
+  return <div className="code-map-table-wrap"><table><thead><tr><th>{t('codeMap.source')}</th><th>{t('codeMap.relation')}</th><th>{t('codeMap.target')}</th><th>{t('codeMap.evidence')}</th></tr></thead><tbody>{edges.map(edge=><tr key={edge.id}><td data-no-translate>{nodes[edge.source_id]?.label||'—'}</td><td>{edge.kind} · {edge.confidence}</td><td data-no-translate>{nodes[edge.target_id]?.label||'—'}</td><td data-no-translate>{edge.source_path}:{edge.range.start_line}<br/>{edge.resolution}</td></tr>)}</tbody></table></div>
 }
 
 function SemanticSearchSettings({onChanged}:{onChanged:()=>Promise<void>}){

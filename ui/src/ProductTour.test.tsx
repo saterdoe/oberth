@@ -28,7 +28,7 @@ describe('product tour',()=>{
     localStorage.setItem(TOUR_STORAGE_KEY,'completed')
     render(<ProductTour onNavigate={()=>undefined}/>)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button',{name:'Open product tour'}))
+    fireEvent.click(screen.getByRole('button',{name:'Open guided tour'}))
     expect(screen.getByRole('dialog',{name:'Product tour'})).toBeInTheDocument()
   })
 

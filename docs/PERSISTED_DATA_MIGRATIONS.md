@@ -13,6 +13,7 @@ downgrade those formats.
 | Task and run state | `internal/api` | 1 | `tasks`, `sessions`, `task_runs` | Unknown versions fail closed and remain recoverable; they are never coerced into a terminal state. |
 | Run events | `internal/api` | 1 | append-only `run_events` | Existing events are immutable. Recovery appends correlated evidence instead of rewriting history. |
 | Result bundle | `internal/api` | 1 | `task_runs.result_bundle` and exports | Additive v1 fields are accepted. Incompatible versions require an explicit migration and byte-identical backup. |
+| Repository Code Map | `internal/codeindex` | Graph 1 | OS cache under `oberth/code-index/<repo-id>/state.json` | Additive cache data. Missing, incompatible or damaged graph state is rebuilt from the authorized repository; existing chunks/vectors remain intact. |
 
 The executable copy of this inventory lives in `internal/migration/policy.go` so
 tests fail when an owner, version, storage location, or rollback policy is absent.
@@ -46,6 +47,14 @@ losing it makes encrypted provider credentials intentionally unrecoverable.
 Unknown or malformed versions fail closed. A failed migration must leave the
 source path unchanged, must not overwrite an existing recovery backup with
 different bytes, and must return an actionable error.
+
+Code Map is a reproducible cache, not the canonical source of project data.
+Upgrading from a release without Graph v1 lazily builds graph fields during the
+next index refresh. Rollback may ignore the additive fields. If recovery is
+needed, stop Oberth, retain the cache for diagnosis, remove only the affected
+repository's code-index cache through the documented reset operation and
+reindex; never delete the repository or Vault memory. A failed graph refresh
+must leave the previous readable state and hybrid search available.
 
 ## Rollback and recovery
 

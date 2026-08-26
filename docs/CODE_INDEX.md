@@ -87,3 +87,66 @@ for every authorized project and indexing behavior is unaffected.
 
 Both routes resolve the repository from Oberth's project database; callers
 cannot supply an arbitrary filesystem path.
+
+## Code Map relationship index
+
+Code Map is an explainable projection over the repository code index. It is
+not a complete call graph and does not turn embedding similarity into a code
+dependency. Graph schema v1 records:
+
+- repository, directory, file and external-package nodes;
+- deterministic filesystem containment edges;
+- static Go and TypeScript/JavaScript import edges;
+- relative source location, extractor/version, resolution reason and
+  `exact` or `extracted` confidence on every relationship.
+
+Go extraction uses the standard parser without compiling the project. Local
+module imports are resolved from `go.mod`; standard-library and third-party
+imports remain terminal external-package nodes. TypeScript, JavaScript, TSX
+and JSX extraction recognizes static ES imports/re-exports and static CommonJS
+`require`. Only deterministic relative paths are resolved internally. Dynamic
+imports and aliases requiring execution of project configuration are left
+unresolved rather than guessed.
+
+The graph is local and incremental. Changed files replace their outgoing
+relationships, deleted files remove stale relationships and atomic state
+publication preserves the previous readable graph on failure. Graph data uses
+the repository identity and its own schema and fingerprint so it cannot be
+mixed across projects, worktrees or extractor versions.
+
+### Relationship queries
+
+- `GET /api/v1/projects/{id}/code-map/nodes?query=<text>&limit=<n>`
+- `GET /api/v1/projects/{id}/code-map/neighborhood?node_id=<id>&direction=both&limit=<n>`
+
+Queries are one hop, deterministically ordered and cursor-paginated. A response
+is limited to 300 nodes and 1,500 edges and reports freshness, coverage,
+fingerprint, truncation and remaining results. It contains metadata only:
+opaque IDs, safe labels, repository-relative paths/ranges and relationship
+evidence. It never contains source snippets, embeddings or absolute roots.
+
+### Using Code Map
+
+In **Settings → Code index**, index a project and choose **Explore
+relationships**. Search for a file or module, select it and inspect incoming
+and outgoing imports. The directional view and table show the same facts; the
+table is the keyboard- and screen-reader-friendly fallback.
+
+**Ask Oberth about this** opens a read-only conversation draft for the selected
+project and attaches the graph fingerprint and selected node/edge IDs to the
+task constraints. Oberth must explain the evidence without modifying files.
+If a later turn requests changes, the existing plan-review and approval flow
+still applies.
+
+### Limitations and troubleshooting
+
+- An absent edge does not prove that no runtime dependency exists.
+- Reflection, dynamic loading, generated code, unsupported languages and
+  configuration aliases may be absent or unresolved.
+- A stale indicator means the source may have changed since indexing. Reindex
+  before relying on the result.
+- A truncated indicator means the server applied its resource budget. Narrow
+  the search or inspect another node rather than treating the view as complete.
+- If graph extraction fails, lexical, symbol and semantic retrieval remain
+  available. Reindexing safely rebuilds graph data without deleting those
+  existing search paths.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/saterdoe/oberth/internal/permission"
@@ -47,5 +48,33 @@ func TestRuntimeWorkspaceCreatesAndRollsBackNewFile(t *testing.T) {
 	}
 	if _, err := workspace.Read(context.Background(), "new.go"); !os.IsNotExist(err) {
 		t.Fatalf("created file survived rollback: %v", err)
+	}
+}
+
+func TestRuntimeWorkspaceReplaceNormalizesModelLineEndings(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "main.go")
+	original := "package main\r\n\r\nfunc Greeting() string {\r\n\treturn \"hello\"\r\n}\r\n"
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := NewRuntime("run-crlf", root, permission.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = workspace.ApplyPatch(context.Background(), Patch{
+		Path:    "main.go",
+		OldText: "\treturn \"hello\"\n}",
+		NewText: "\treturn \"Hello from Oberth\"\n}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(content); got != strings.Replace(original, "hello", "Hello from Oberth", 1) {
+		t.Fatalf("line endings were not preserved: %q", got)
 	}
 }

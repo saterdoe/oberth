@@ -41,6 +41,20 @@ func TestSafeAgentCommandAllowsReadOnlyGitDiffCheck(t *testing.T) {
 	}
 }
 
+func TestNormalizeAgentCommandSplitsAllowlistedCompleteCommand(t *testing.T) {
+	program, args := normalizeAgentCommand("go test ./...", nil)
+	if program != "go" || len(args) != 2 || args[0] != "test" || args[1] != "./..." {
+		t.Fatalf("unexpected normalized command: %q %#v", program, args)
+	}
+}
+
+func TestNormalizeAgentCommandLeavesUnknownCompleteCommandBlocked(t *testing.T) {
+	program, args := normalizeAgentCommand("go run ./cmd/server", nil)
+	if program != "go run ./cmd/server" || len(args) != 0 {
+		t.Fatalf("unsafe command was normalized: %q %#v", program, args)
+	}
+}
+
 func TestSafeAgentCommandAllowsStrictClangSyntaxCheck(t *testing.T) {
 	args := []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "main.c"}
 	if !safeAgentCommand(`C:\Program Files\LLVM\bin\clang.exe`, args) {

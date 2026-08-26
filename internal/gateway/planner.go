@@ -5,19 +5,21 @@ import (
 	"errors"
 	"fmt"
 
+	semcontext "github.com/saterdoe/oberth/internal/context"
 	"github.com/saterdoe/oberth/pkg/llm"
 )
 
 // Step represents a single execution step.
 type Step struct {
-	ID         string               `json:"id"`
-	ProviderID string               `json:"provider_id"`
-	Model      string               `json:"model"`
-	MaxTokens  int                  `json:"max_tokens,omitempty"`
-	DependsOn  []string             `json:"depends_on,omitempty"`
-	Fallbacks  []Step               `json:"fallbacks,omitempty"`
-	Reviewer   *StepReviewer        `json:"reviewer,omitempty"`
-	Tools      []llm.ToolDefinition `json:"tools,omitempty"`
+	ID         string                           `json:"id"`
+	ProviderID string                           `json:"provider_id"`
+	Model      string                           `json:"model"`
+	MaxTokens  int                              `json:"max_tokens,omitempty"`
+	DependsOn  []string                         `json:"depends_on,omitempty"`
+	Fallbacks  []Step                           `json:"fallbacks,omitempty"`
+	Reviewer   *StepReviewer                    `json:"reviewer,omitempty"`
+	Tools      []llm.ToolDefinition             `json:"tools,omitempty"`
+	Budget     *semcontext.EffectiveModelBudget `json:"context_budget,omitempty"`
 }
 
 // StepReviewer defines a reviewer step configuration.

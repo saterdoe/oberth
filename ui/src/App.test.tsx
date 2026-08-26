@@ -60,6 +60,8 @@ describe('task workspace', () => {
       if (url.endsWith('/costs')) return ok({})
       if (url.endsWith('/projects')) return ok(projectFixtures)
       if (url.endsWith('/projects/project-1/code-index')) return ok({schema_version:'1',repo_id:'repo:test',indexed_files:12,chunk_count:34,last_indexed:new Date().toISOString(),fresh:true})
+      if (url.includes('/projects/project-1/code-map/nodes')) return ok({schema_version:'1',repo_id:'repo:test',fingerprint:'graph:test',fresh:true,last_indexed:new Date().toISOString(),coverage:{languages:{typescript:2},node_count:2,edge_count:1},truncated:false,remaining:0,edges:[],nodes:[{id:'node:app',repo_id:'repo:test',kind:'file',label:'app.ts',path:'src/app.ts',language:'typescript',schema_version:'1'}]})
+      if (url.includes('/projects/project-1/code-map/neighborhood')) return ok({schema_version:'1',repo_id:'repo:test',fingerprint:'graph:test',fresh:true,last_indexed:new Date().toISOString(),coverage:{languages:{typescript:2},node_count:2,edge_count:1},truncated:false,remaining:0,nodes:[{id:'node:app',repo_id:'repo:test',kind:'file',label:'app.ts',path:'src/app.ts',language:'typescript',schema_version:'1'},{id:'node:db',repo_id:'repo:test',kind:'file',label:'db.ts',path:'src/db.ts',language:'typescript',schema_version:'1'}],edges:[{id:'edge:1',source_id:'node:app',target_id:'node:db',kind:'imports',source_path:'src/app.ts',range:{start_line:3,end_line:3},extractor:'static-js-imports',confidence:'extracted',resolution:'resolved repository-relative import'}]})
       if (url.includes('/git/status?path=')) return ok({ files: [], branch: 'main' })
       if (url.endsWith('/git/diff')) return ok({ files: [] })
       if (url.includes('/verifier/plan?path=')) return ok({ commands: [] })
@@ -87,6 +89,7 @@ describe('task workspace', () => {
   it('supports discoverable workspace shortcuts without hijacking editors', async () => {
     render(<App />)
     await screen.findByRole('button',{name:'Dashboard'})
+    expect(screen.getByRole('button',{name:'Open guided tour'})).toHaveTextContent('Guided tour')
 
     fireEvent.keyDown(document,{key:'?',shiftKey:true})
     expect(screen.getByRole('dialog',{name:'Keyboard shortcuts'})).toBeInTheDocument()
@@ -414,6 +417,30 @@ describe('task workspace', () => {
     expect(screen.getByText('Project 5')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'Show less'}))
     expect(screen.queryByText('Project 4')).not.toBeInTheDocument()
+  })
+
+  it('explores a bounded code-map neighborhood with an equivalent table view', async () => {
+    providerFixtures=[{id:'provider-1',name:'Local',provider_type:'ollama',is_active:true,default_model:'coder',models:'coder'}]
+    render(<App />)
+    fireEvent.click(screen.getAllByText('Settings')[0])
+    fireEvent.click(await screen.findByRole('button',{name:'Explore relationships'}))
+    expect(await screen.findByRole('dialog',{name:'Code Map'})).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button',{name:/app\.ts/}))
+    expect(await screen.findByText('db.ts')).toBeInTheDocument()
+    expect(screen.getByText('src/app.ts:3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Table'}))
+    expect(screen.getByRole('columnheader',{name:'Relationship'})).toBeInTheDocument()
+    expect(screen.getByText('imports · extracted')).toBeInTheDocument()
+    expect(screen.getByText('Current index')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'Ask Oberth about this'}))
+    const draft=await screen.findByRole('textbox',{name:/Qué querés lograr/})
+    expect((draft as HTMLTextAreaElement).value).toContain('app.ts')
+    expect(screen.getByRole('combobox',{name:'Repositorio'})).toHaveValue('project-1')
+    fireEvent.click(screen.getByRole('button',{name:'Crear y ejecutar en Demo'}))
+    await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/tasks$/),expect.objectContaining({method:'POST',body:expect.stringContaining('"code_map_context"')})))
+    const taskCall=(fetch as unknown as {mock:{calls:[string,RequestInit][]}}).mock.calls.find(([url,init])=>String(url).endsWith('/tasks')&&init?.method==='POST')
+    const taskBody=JSON.parse(String(taskCall?.[1]?.body))
+    expect(taskBody.constraints.code_map_context).toMatchObject({schema_version:'1',fingerprint:'graph:test',node_ids:['node:app','node:db'],edge_ids:['edge:1']})
   })
 
   it('clears provider credentials from the form immediately after saving', async () => {

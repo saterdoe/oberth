@@ -49,3 +49,15 @@ the release artifact allowlist together. Preview runners are not used to claim
 stable support. Platform-specific defects should include OS version,
 architecture, shell, filesystem type, and whether execution occurred inside
 WSL or another compatibility layer.
+
+## Code Map language coverage
+
+| Language | Static imports | Internal resolution | Calls/references |
+| --- | --- | --- | --- |
+| Go | Supported | Module-relative through `go.mod` | Not supported |
+| TypeScript / TSX | Supported | Deterministic relative paths | Not supported |
+| JavaScript / JSX | Supported | Deterministic relative paths | Not supported |
+| Other indexed languages | Not supported | Not supported | Not supported |
+
+“Not supported” is shown as partial coverage in the interface and must never
+be interpreted as proof that a relationship does not exist.

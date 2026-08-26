@@ -15,6 +15,27 @@ all use the same local Go service and versioned runtime contracts.
 - `extensions`: optional editor integrations that delegate to the local
   runtime.
 
+## Code Map architecture
+
+`internal/codeindex` owns both hybrid retrieval chunks and a separate Graph v1
+relationship model. The graph currently contains filesystem containment and
+static imports for Go and TypeScript/JavaScript. Extractors are pure local
+parsers: they do not execute repositories, project configuration, package
+managers or toolchains and do not access the network.
+
+Graph identity is deterministic and repository-scoped. Nodes, edges, source
+ranges, provenance, confidence and extractor/schema versions are persisted
+with a graph fingerprint. Query APIs expose bounded one-hop subgraphs; the UI
+never reads persistence directly and never requests the whole repository.
+The visual explorer is replaceable presentation. The versioned graph and its
+evidence contract are the architectural asset.
+
+The graph API is metadata-only. Source remains in the existing private chunk
+index and enters model context only through the normal context compiler and
+budgets. A Code Map selection contributes opaque graph IDs and its fingerprint
+to task constraints, preserving auditability without dumping the graph into a
+prompt.
+
 ## Task lifecycle
 
 1. A user selects a repository and describes an intended change.
@@ -38,6 +59,11 @@ Repository content, prompts, model responses and tool arguments are untrusted.
 Filesystem and command effects must remain scoped to the selected repository
 and active worktree. Provider secrets are stored outside tracked configuration
 and redacted from logs and evidence.
+
+Repository paths, filenames and import specifiers used by Code Map are also
+untrusted. They are rendered only as text, are resource-bounded and cannot
+become HTML, SVG, Mermaid, URLs or shell fragments. Source navigation must
+re-resolve the authorized project and canonical path at action time.
 
 The local API binds to loopback and requires a generated token. Oberth is a
 single-user local application in this alpha; it does not provide

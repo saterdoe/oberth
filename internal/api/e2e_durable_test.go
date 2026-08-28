@@ -65,8 +65,18 @@ func (p *durableFakeProvider) Chat(_ context.Context, request llm.ChatRequest) (
 	return response, nil
 }
 
-func (p *durableFakeProvider) ChatStream(context.Context, llm.ChatRequest) (<-chan llm.StreamEvent, error) {
-	return nil, fmt.Errorf("streaming is not expected when typed tools are present")
+func (p *durableFakeProvider) ChatStream(ctx context.Context, request llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(request.Tools) > 0 || len(p.responses) == 0 || p.responses[0].ToolCall != nil {
+		return nil, fmt.Errorf("unexpected streaming call outside read-only plan")
+	}
+	response := p.responses[0]
+	p.responses = p.responses[1:]
+	stream := make(chan llm.StreamEvent, 1)
+	stream <- llm.StreamEvent{Content: response.Content}
+	close(stream)
+	return stream, nil
 }
 
 func TestDurableRunHTTPHappyPath(t *testing.T) {
@@ -83,10 +93,8 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(previousCWD) })
 
-	embedded, err := db.StartEmbedded(filepath.Join(controlRoot, "postgres"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Log("GATE database: isolated migrated durable storage")
+	embedded := startOracleDatabase(t, filepath.Join(controlRoot, "postgres"))
 	t.Cleanup(func() { _ = embedded.Stop() })
 	sqlDB, err := sql.Open("pgx", embedded.DSN)
 	if err != nil {
@@ -101,7 +109,9 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
+	retainOracleArtifacts(t, pool)
 
+	t.Log("GATE fixture: one dependency-free module in an isolated Git repository")
 	repository := filepath.Join(controlRoot, "fixture")
 	if err := os.MkdirAll(repository, 0o755); err != nil {
 		t.Fatal(err)
@@ -200,6 +210,7 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 		t.Fatal("simultaneous run requests returned no run")
 	}
 
+	t.Log("GATE evidence: typed actions, verification and unchanged primary checkout")
 	run := waitForRunState(t, httpServer.URL, runID, "review")
 	bundle := run["result_bundle"].(map[string]any)
 	if bundle["verification_status"] != "passed" {
@@ -254,6 +265,7 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 		t.Fatalf("idempotent retry created another run: %+v", replayed)
 	}
 
+	t.Log("GATE promotion: explicit approval applies the verified candidate")
 	outcome := postData(t, httpServer.URL+"/api/v1/runs/"+runID+"/outcome", map[string]any{
 		"outcome": "accepted", "note": "E2E reviewed",
 	})
@@ -310,6 +322,7 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	if costAuditEvents != 6 {
 		t.Fatalf("expected one cost audit event per model turn, got %d", costAuditEvents)
 	}
+	t.Log("GATE recovery: interruption preserves artifacts and reconciliation is idempotent")
 	for _, update := range []struct {
 		query string
 		id    any
@@ -366,6 +379,7 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	if recoveryCount != 1 || interruptionEvents != 1 {
 		t.Fatalf("recovery was not idempotent: count=%d events=%d", recoveryCount, interruptionEvents)
 	}
+	exerciseDecisionLadder(t, httpServer.URL, repository, project["id"].(string), task["id"].(string), runID, fake)
 
 	fake.append(toolResponse("finish", `{"summary":"Claimed success without verification."}`))
 	unverifiedTask := postData(t, httpServer.URL+"/api/v1/tasks", map[string]any{

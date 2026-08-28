@@ -150,7 +150,37 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	server := NewServer(pool, providers, routing, sessions, costLogs, budgets, audit, executions, approvals, nil, nil, nil, executor, nil, vaultConn, cfg, nil)
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
+	if ready := server.runtimeReadiness(context.Background()); !ready.Ready {
+		t.Fatalf("configured runtime not ready: %+v", ready)
+	}
+	readOnlyConfig := pool.Config().Copy()
+	readOnlyConfig.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	readOnlyPool, err := pgxpool.NewWithConfig(context.Background(), readOnlyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(readOnlyPool.Close)
+	readOnlyServer := &Server{pool: readOnlyPool, executor: executor}
+	if ready := readOnlyServer.runtimeReadiness(context.Background()); ready.Ready || ready.Reason != "database_not_writable" {
+		t.Fatalf("read-only database accepted: %+v", ready)
+	}
 
+	t.Cleanup(func() {
+		snapshot := server.telemetry.Snapshot()
+		var contextSeen, providerSeen bool
+		for _, metric := range snapshot.Metrics {
+			contextSeen = contextSeen || metric.Stage == "context"
+			providerSeen = providerSeen || metric.Stage == "provider.chat"
+		}
+		if !contextSeen || !providerSeen {
+			t.Errorf("missing stage/provider telemetry: %+v", snapshot.Metrics)
+		}
+		for _, trace := range snapshot.Traces {
+			if trace.RunID == "" || trace.TaskID == "" || trace.SessionID == "" {
+				t.Errorf("uncorrelated trace: %+v", trace)
+			}
+		}
+	})
 	workspace := postData(t, httpServer.URL+"/api/v1/workspaces", map[string]any{"name": "e2e"})
 	project := postData(t, httpServer.URL+"/api/v1/projects", map[string]any{
 		"name": "fixture", "path": repository, "workspace_id": workspace["id"],
@@ -468,6 +498,22 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	}
 	if err := audit.VerifyChain(context.Background()); err == nil {
 		t.Fatal("tampered audit evidence was not detected")
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE task_runs SET state='running',lease_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1`, failedAccepted["run_id"]); err != nil {
+		t.Fatal(err)
+	}
+	diagnostics := getData(t, httpServer.URL+"/api/v1/diagnostics/runtime").(map[string]any)
+	if diagnostics["stuck_query_available"] != true || len(diagnostics["stuck_runs"].([]any)) == 0 {
+		t.Fatalf("missing expired-lease signal: %+v", diagnostics)
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE task_runs SET state='blocked' WHERE id=$1`, failedAccepted["run_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE providers SET is_active=false`); err != nil {
+		t.Fatal(err)
+	}
+	if ready := server.runtimeReadiness(context.Background()); ready.Ready || ready.Reason != "no_active_provider" {
+		t.Fatalf("missing provider reported ready: %+v", ready)
 	}
 }
 

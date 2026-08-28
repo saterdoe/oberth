@@ -11,6 +11,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/saterdoe/oberth/internal/observability"
+	secretspkg "github.com/saterdoe/oberth/pkg/secrets"
 )
 
 type Probe func() error
@@ -48,23 +51,71 @@ func ComprehensiveChecks(probes map[string]Probe) []Check {
 }
 
 type BundleInput struct {
-	Logs     string            `json:"logs"`
-	Config   string            `json:"config"`
-	Versions map[string]string `json:"versions"`
-	Health   []Check           `json:"health"`
-	Errors   []string          `json:"errors"`
+	Logs     string              `json:"logs"`
+	Config   string              `json:"config"`
+	Versions map[string]string   `json:"versions"`
+	Health   []Check             `json:"health"`
+	Errors   []string            `json:"errors"`
+	Runtime  *RuntimeDiagnostics `json:"runtime,omitempty"`
+}
+
+// Explicit fields keep source, prompts, output and credentials out of telemetry.
+type RuntimeDiagnostics struct {
+	SchemaVersion string `json:"schema_version"`
+	Readiness     struct {
+		Ready  bool   `json:"ready"`
+		Reason string `json:"reason"`
+	} `json:"readiness"`
+	Telemetry observability.Snapshot `json:"telemetry"`
+	StuckRuns []struct {
+		RunID         string    `json:"run_id"`
+		TaskID        string    `json:"task_id"`
+		LastProgress  time.Time `json:"last_progress"`
+		LeaseExpired  bool      `json:"lease_expired"`
+		ProgressStale bool      `json:"progress_stale"`
+	} `json:"stuck_runs"`
+	StuckQueryAvailable bool `json:"stuck_query_available"`
 }
 
 var sensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`),
 	regexp.MustCompile(`(?i)(authorization:\s*bearer\s+)[^\s]+`),
-	regexp.MustCompile(`(?i)((?:api[_-]?key|token|password)\s*[:=]\s*)[^\s]+`),
+	regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|secret)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)`),
 }
 
 func redact(value string) string {
 	for _, pattern := range sensitivePatterns {
 		value = pattern.ReplaceAllString(value, `${1}[REDACTED]`)
 	}
-	return value
+	return secretspkg.Redact(value)
+}
+
+func redactedJSON(value any) ([]byte, error) {
+	data, err := secretspkg.MarshalRedacted(value)
+	if err != nil {
+		return nil, err
+	}
+	var decoded any
+	if err = json.Unmarshal(data, &decoded); err != nil {
+		return nil, err
+	}
+	var visit func(any) any
+	visit = func(value any) any {
+		switch current := value.(type) {
+		case string:
+			return redact(current)
+		case map[string]any:
+			for key, child := range current {
+				current[key] = visit(child)
+			}
+		case []any:
+			for index, child := range current {
+				current[index] = visit(child)
+			}
+		}
+		return value
+	}
+	return json.MarshalIndent(visit(decoded), "", "  ")
 }
 
 func CreateBundle(path string, input BundleInput) error {
@@ -77,15 +128,16 @@ func CreateBundle(path string, input BundleInput) error {
 	}
 	archive := zip.NewWriter(file)
 	entries := map[string]any{
-		"logs.txt": input.Logs, "config.txt": input.Config, "versions.json": input.Versions,
+		"logs.txt": input.Logs, "config.txt": "[REDACTED] Raw configuration omitted; inspect local configuration separately.", "versions.json": input.Versions,
 		"health.json": input.Health, "errors.json": input.Errors,
+		"runtime.json": input.Runtime,
 	}
 	for name, value := range entries {
 		var content string
 		if text, ok := value.(string); ok {
-			content = text
+			content = redact(text)
 		} else {
-			data, marshalErr := json.MarshalIndent(value, "", "  ")
+			data, marshalErr := redactedJSON(value)
 			if marshalErr != nil {
 				archive.Close()
 				file.Close()
@@ -99,7 +151,7 @@ func CreateBundle(path string, input BundleInput) error {
 			file.Close()
 			return createErr
 		}
-		if _, writeErr := writer.Write([]byte(redact(content))); writeErr != nil {
+		if _, writeErr := writer.Write([]byte(content)); writeErr != nil {
 			archive.Close()
 			file.Close()
 			return writeErr
@@ -110,6 +162,44 @@ func CreateBundle(path string, input BundleInput) error {
 		return err
 	}
 	return file.Close()
+}
+
+// FetchRuntimeDiagnostics uses the same local authentication as status probes.
+// It does not read a vault or source repository to construct the bundle.
+func FetchRuntimeDiagnostics() (*RuntimeDiagnostics, error) {
+	statusURL := strings.TrimSpace(os.Getenv("OBERTH_DOCTOR_STATUS_URL"))
+	if statusURL == "" {
+		statusURL = "http://127.0.0.1:9090/api/v1/status"
+	}
+	request, err := http.NewRequest(http.MethodGet, strings.TrimSuffix(statusURL, "/status")+"/diagnostics/runtime", nil)
+	if err != nil {
+		return nil, fmt.Errorf("invalid diagnostics URL")
+	}
+	token := strings.TrimSpace(os.Getenv("OBERTH_AUTH_TOKEN"))
+	if token == "" {
+		if data, err := os.ReadFile(filepath.Join("data", "local-token")); err == nil {
+			token = strings.TrimSpace(string(data))
+		}
+	}
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("runtime diagnostics unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("runtime diagnostics returned HTTP %d", response.StatusCode)
+	}
+	var envelope struct {
+		Data RuntimeDiagnostics `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1024*1024)).Decode(&envelope); err != nil || envelope.Data.SchemaVersion != "1" {
+		return nil, fmt.Errorf("invalid runtime diagnostics response")
+	}
+	return &envelope.Data, nil
 }
 
 func DefaultProbes(configPath, vaultPath string) map[string]Probe {

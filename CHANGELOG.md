@@ -4,6 +4,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- Authenticated runtime readiness and content-free, bounded stage/provider latency
+  diagnostics with correlated traces and stale-progress/lease signals (#20).
+- Runtime telemetry in doctor bundles, raw-configuration omission, and documented
+  initial operational SLOs and diagnostic retention limits.
+
 ## 0.1.0-alpha.9 - 2026-08-26
 
 ### Added

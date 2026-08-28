@@ -24,6 +24,7 @@ import (
 	"github.com/saterdoe/oberth/internal/db"
 	"github.com/saterdoe/oberth/internal/db/repos"
 	"github.com/saterdoe/oberth/internal/gateway"
+	"github.com/saterdoe/oberth/internal/observability"
 	"github.com/saterdoe/oberth/internal/permission"
 	"github.com/saterdoe/oberth/internal/reasoning"
 	"github.com/saterdoe/oberth/internal/tasktype"
@@ -386,6 +387,11 @@ func (s *Server) handleRunTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.runsMu.Lock()
+	if s.draining {
+		s.runsMu.Unlock()
+		respondError(w, http.StatusServiceUnavailable, "RUNTIME_DRAINING", "runtime is shutting down; retry after restart", nil)
+		return
+	}
 	if start, exists := s.startingRuns[id]; exists {
 		if idempotencyKey != "" && start.idempotencyKey == idempotencyKey {
 			s.runsMu.Unlock()
@@ -612,8 +618,17 @@ func (s *Server) selectTaskRoute(ctx context.Context, taskType, repoPath string)
 }
 
 func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, providerID, model string) {
+	ctx = observability.WithCollector(ctx, &s.telemetry, observability.Correlation{RunID: run.ID.String(), TaskID: task.ID.String(), SessionID: session.ID.String()})
 	defer func() { s.runsMu.Lock(); delete(s.activeRuns, task.ID); s.runsMu.Unlock() }()
 	runState := "failed"
+	finishRunMetric := observability.Start(ctx, "run", "")
+	defer func() {
+		var err error
+		if runState != "review" && runState != "completed" {
+			err = errors.New("run_not_completed")
+		}
+		finishRunMetric(err)
+	}()
 	runWarnings := []string{}
 	runtimeEvidence := map[string]any{}
 	var reasoningCase *reasoning.CaseV1
@@ -728,7 +743,9 @@ func (s *Server) executeSingleTask(ctx context.Context, run *durableRun, task *r
 			return sources, nil
 		}
 	}
+	finishContextMetric := observability.Start(ctx, "context", "")
 	compiled, compileErr := contextPipeline.CompileRepository(ctx, run.WorktreePath, task.Description, task.TaskType, compileOptions)
+	finishContextMetric(compileErr)
 	contextEnvelopeFingerprint := ""
 	if compileErr != nil {
 		runWarnings = append(runWarnings, "context compilation: "+compileErr.Error())
@@ -915,6 +932,7 @@ a legitimate outcome and does not require a verification command.
 			return s.resolveApproval(approvalCtx, request)
 		}
 	}
+	finishAgentMetric := observability.Start(ctx, "stage.agent", providerID)
 	agentResult, err := agentruntime.Run(gateway.WithAuditSessionID(ctx, session.ID.String()), typedSystemPrompt, prompt, agentruntime.Config{
 		MaxTurns:            maxIterations,
 		MaxInputTokens:      effectiveBudget.AvailableInputTokens * maxIterations,
@@ -1057,6 +1075,7 @@ a legitimate outcome and does not require a verification command.
 			_ = s.appendRunEvent(ctx, run.ID, "agent_turn", payload)
 		},
 	})
+	finishAgentMetric(err)
 	if readOnlyRequest && compiled != nil && strings.TrimSpace(agentResult.Summary) != "" {
 		seenPaths := map[string]bool{}
 		paths := make([]string, 0, len(compiled.Manifest))
@@ -1316,7 +1335,9 @@ func contextOptionsForProvider(options semcontext.CompileOptions, providerType s
 	return options
 }
 
-func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, stage taskExecutionStage, taskPrompt, extraContext, contextEnvelopeFingerprint string) (string, error) {
+func (s *Server) runWorkflowAdvisory(ctx context.Context, run *durableRun, task *repos.Task, session *repos.Session, stage taskExecutionStage, taskPrompt, extraContext, contextEnvelopeFingerprint string) (outputResult string, resultErr error) {
+	finishStageMetric := observability.Start(ctx, "stage."+stage.Role, stage.ProviderID)
+	defer func() { finishStageMetric(resultErr) }()
 	system := "You are the " + stage.Role + " stage in a software delivery workflow. Do not claim to have changed files. Produce a concise, actionable handoff for the next stage."
 	if stage.Role == "qa" || stage.Role == "review" {
 		system += " Evaluate the supplied diff and verification evidence. End with exactly VERDICT: PASS or VERDICT: FAIL."

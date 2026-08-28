@@ -5,6 +5,12 @@ typed agent runtime, tools, worktrees, evidence and review/promotion path. A tin
 dependency-free Go repository and scripted in-process provider replace personal
 repositories and live models. This proves product invariants, not model quality.
 
+The HTTP oracle retains the real server rate limiter. Status polling is limited
+to once per second so slow CI runners leave room for mutation and evidence
+requests; any non-success status fails immediately rather than masquerading as
+a model timeout. Fixture Git line endings are explicit, and retries wait for
+the previous worker to finish its deferred cleanup.
+
 ## Gates and dependencies
 
 | Gate | Depends on | Property |

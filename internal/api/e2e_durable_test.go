@@ -584,6 +584,9 @@ func waitForRunState(t *testing.T, baseURL, runID, wanted string) map[string]any
 		}
 		err = json.NewDecoder(response.Body).Decode(&envelope)
 		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("run status request returned HTTP %d", response.StatusCode)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -592,7 +595,8 @@ func waitForRunState(t *testing.T, baseURL, runID, wanted string) map[string]any
 		} else if state == "blocked" || state == "failed" || state == "cancelled" {
 			t.Fatalf("run terminated in %s: %+v", state, envelope.Data["result_bundle"])
 		}
-		time.Sleep(100 * time.Millisecond)
+		// Leave room below the real 120/minute limit for mutation/evidence requests.
+		time.Sleep(time.Second)
 	}
 	t.Fatalf("run %s did not reach %s", runID, wanted)
 	return nil
@@ -611,6 +615,9 @@ func waitForTerminalRun(t *testing.T, baseURL, runID string) map[string]any {
 		}
 		err = json.NewDecoder(response.Body).Decode(&envelope)
 		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("run status request returned HTTP %d", response.StatusCode)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -618,7 +625,7 @@ func waitForTerminalRun(t *testing.T, baseURL, runID string) map[string]any {
 		case "blocked", "failed", "cancelled", "review", "completed":
 			return envelope.Data
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	t.Fatalf("run %s did not terminate", runID)
 	return nil

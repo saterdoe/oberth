@@ -1,0 +1,42 @@
+name: Hermetic validation ladder
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ladder:
+    name: Hermetic ladder (${{ matrix.os }})
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate ladder contracts
+        run: node --test scripts/validation-ladder.test.mjs
+      - name: Prepare dependencies (network permitted)
+        run: node scripts/validation-ladder.mjs --prepare
+      - name: Run provider-free offline oracle
+        run: node scripts/validation-ladder.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: validation-${{ matrix.os }}
+          path: artifacts/validation
+          retention-days: 7
+          if-no-files-found: warn

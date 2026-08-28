@@ -4,6 +4,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- A provider-free validation ladder with named invariants, offline dependency
+  checks, isolated fixtures, retained gate reports and native CI coverage (#52).
+- Durable planning, correction, rejection, conflict, cursor replay and fresh-run
+  resume scenarios alongside evidence-backed promotion checks.
+
 ## 0.1.0-alpha.9 - 2026-08-26
 
 ### Added

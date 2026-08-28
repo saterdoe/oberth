@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/saterdoe/oberth/internal/db"
@@ -47,7 +48,7 @@ func oracleRequest(t *testing.T, method, url string, body any, want int) map[str
 	return result
 }
 
-func exerciseDecisionLadder(t *testing.T, url, repository, projectID, recoveredTaskID, oldRunID string, fake *durableFakeProvider) {
+func exerciseDecisionLadder(t *testing.T, server *Server, url, repository, projectID, recoveredTaskID, oldRunID string, fake *durableFakeProvider) {
 	t.Helper()
 	initial, err := os.ReadFile(filepath.Join(repository, "main.go"))
 	if err != nil {
@@ -65,6 +66,21 @@ func exerciseDecisionLadder(t *testing.T, url, repository, projectID, recoveredT
 	}
 	start := func(id string) map[string]any {
 		t.Helper()
+		// A durable terminal state is published before deferred worker cleanup.
+		// Wait for that explicit boundary before scheduling another attempt.
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			server.runsMu.Lock()
+			pending := len(server.activeRuns) + len(server.startingRuns)
+			server.runsMu.Unlock()
+			if pending == 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("previous run did not release its worker")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 		queueChange()
 		accepted := postData(t, url+"/api/v1/tasks/"+id+"/run", map[string]any{})
 		return waitForRunState(t, url, accepted["run_id"].(string), "review")

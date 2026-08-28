@@ -119,6 +119,8 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	writeFixtureFile(t, repository, "go.mod", "module example.com/durable\n\ngo 1.24\n")
 	writeFixtureFile(t, repository, "main.go", "package durable\n\nfunc Message() string { return \"old\" }\n")
 	gitFixture(t, repository, "init", "--initial-branch=main")
+	// Fixture bytes must not depend on a runner's global core.autocrlf.
+	gitFixture(t, repository, "config", "core.autocrlf", "false")
 	gitFixture(t, repository, "config", "user.email", "e2e@example.test")
 	gitFixture(t, repository, "config", "user.name", "oberth E2E")
 	gitFixture(t, repository, "add", ".")
@@ -379,7 +381,7 @@ func TestDurableRunHTTPHappyPath(t *testing.T) {
 	if recoveryCount != 1 || interruptionEvents != 1 {
 		t.Fatalf("recovery was not idempotent: count=%d events=%d", recoveryCount, interruptionEvents)
 	}
-	exerciseDecisionLadder(t, httpServer.URL, repository, project["id"].(string), task["id"].(string), runID, fake)
+	exerciseDecisionLadder(t, server, httpServer.URL, repository, project["id"].(string), task["id"].(string), runID, fake)
 
 	fake.append(toolResponse("finish", `{"summary":"Claimed success without verification."}`))
 	unverifiedTask := postData(t, httpServer.URL+"/api/v1/tasks", map[string]any{

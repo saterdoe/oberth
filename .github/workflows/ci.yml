@@ -26,6 +26,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: node scripts/release-check.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-performance-${{ matrix.os }}
+          path: artifacts/performance
+          retention-days: 7
+          if-no-files-found: warn
 
   quality:
     name: Quality gates
@@ -54,8 +61,8 @@ jobs:
     name: Performance budgets
     runs-on: ubuntu-latest
     env:
-      OBERTH_PERF_REPORT: artifacts/performance/go-performance.json
-      OBERTH_UI_BUDGET_REPORT: artifacts/performance/ui-bundle.json
+      OBERTH_PERF_REPORT: ${{ github.workspace }}/artifacts/performance/go-performance.json
+      OBERTH_UI_BUDGET_REPORT: ${{ github.workspace }}/artifacts/performance/ui-bundle.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

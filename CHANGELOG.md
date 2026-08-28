@@ -4,6 +4,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+- Add repeated durable-runtime resilience checks with database shutdown/restart,
+  cursor replay, concurrent decisions and worktree/worker cleanup assertions.
+- Guard run decisions before Git mutations and retain per-iteration stress logs.
+
 ## 0.1.0-alpha.9 - 2026-08-26
 
 ### Added

@@ -54,8 +54,8 @@ jobs:
     name: Performance budgets
     runs-on: ubuntu-latest
     env:
-      OBERTH_PERF_REPORT: artifacts/performance/go-performance.json
-      OBERTH_UI_BUDGET_REPORT: artifacts/performance/ui-bundle.json
+      OBERTH_PERF_REPORT: ${{ github.workspace }}/artifacts/performance/go-performance.json
+      OBERTH_UI_BUDGET_REPORT: ${{ github.workspace }}/artifacts/performance/ui-bundle.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

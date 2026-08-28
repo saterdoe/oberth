@@ -27,6 +27,19 @@ type measurement struct {
 
 func TestRegressionBudgets(t *testing.T) {
 	var report []measurement
+	// Retain partial measurements even when a budget fails and calls FailNow.
+	t.Cleanup(func() {
+		if destination := strings.TrimSpace(os.Getenv("OBERTH_PERF_REPORT")); destination != "" {
+			if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+				t.Error(err)
+				return
+			}
+			encoded, _ := json.MarshalIndent(map[string]any{"schema_version": "1", "measurements": report}, "", "  ")
+			if err := os.WriteFile(destination, encoded, 0o600); err != nil {
+				t.Error(err)
+			}
+		}
+	})
 	for _, fixture := range []struct {
 		name   string
 		count  int
@@ -42,15 +55,15 @@ func TestRegressionBudgets(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-		assertBudget(t, m)
 		report = append(report, m)
+		assertBudget(t, m)
 
 		lines := fixture.count
 		content := strings.Repeat("func Handler() { return }\n", lines)
 		file := codeindex.File{Path: "internal/service.go", Language: "go", Content: []byte(content), Hash: "fixture"}
 		m = sample("code_chunk", fixture.name, fixture.budget, func() { _ = codeindex.ChunkFile("repo:fixture", file, codeindex.DefaultOptions(), "disabled") })
-		assertBudget(t, m)
 		report = append(report, m)
+		assertBudget(t, m)
 
 		root, dataDir := t.TempDir(), t.TempDir()
 		for i := 0; i < fixture.count; i++ {
@@ -73,15 +86,15 @@ func TestRegressionBudgets(t *testing.T) {
 				t.Fatal(updateErr)
 			}
 		})
-		assertBudget(t, m)
 		report = append(report, m)
+		assertBudget(t, m)
 		m = sample("index_startup", fixture.name, fixture.budget, func() {
 			if _, openErr := codeindex.Open(root, dataDir, nil, nil, options); openErr != nil {
 				t.Fatal(openErr)
 			}
 		})
-		assertBudget(t, m)
 		report = append(report, m)
+		assertBudget(t, m)
 
 		payload := map[string]any{"data": sources, "count": len(sources), "cursor": "fixture"}
 		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _ = json.NewEncoder(w).Encode(payload) })
@@ -93,17 +106,8 @@ func TestRegressionBudgets(t *testing.T) {
 				t.Fatalf("unexpected API status %d", recorder.Code)
 			}
 		})
-		assertBudget(t, m)
 		report = append(report, m)
-	}
-	if destination := strings.TrimSpace(os.Getenv("OBERTH_PERF_REPORT")); destination != "" {
-		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		encoded, _ := json.MarshalIndent(map[string]any{"schema_version": "1", "measurements": report}, "", "  ")
-		if err := os.WriteFile(destination, encoded, 0o600); err != nil {
-			t.Fatal(err)
-		}
+		assertBudget(t, m)
 	}
 }
 

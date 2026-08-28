@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/saterdoe/oberth/internal/reasoning"
 	gitpkg "github.com/saterdoe/oberth/pkg/git"
 	secretspkg "github.com/saterdoe/oberth/pkg/secrets"
@@ -237,6 +238,29 @@ func (s *Server) handleRunOutcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var worktree gitpkg.SessionWorktree
+	// Serialize before touching Git, not only when persisting the outcome.
+	// A PostgreSQL session lock also covers requests handled by another daemon.
+	// A dedicated connection avoids exhausting the query pool when several
+	// independent decisions hold guards and then need to write audit records.
+	decisionConn, err := pgx.ConnectConfig(r.Context(), s.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		respondError(w, 503, "DECISION_UNAVAILABLE", "cannot acquire decision guard", nil)
+		return
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = decisionConn.Close(ctx) // closing the session releases its advisory lock
+	}()
+	var locked bool
+	if err := decisionConn.QueryRow(r.Context(), `SELECT pg_try_advisory_lock(hashtextextended($1,45))`, id.String()).Scan(&locked); err != nil {
+		respondError(w, 503, "DECISION_UNAVAILABLE", "cannot acquire decision guard", nil)
+		return
+	}
+	if !locked {
+		respondError(w, 409, "DECISION_IN_PROGRESS", "another decision is being applied to this run", nil)
+		return
+	}
 	var taskID, sessionID uuid.UUID
 	var baseCommit string
 	var resultBundle json.RawMessage

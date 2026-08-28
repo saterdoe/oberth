@@ -82,7 +82,7 @@ describe('task workspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open session for Revisar autenticación' }))
 
     fireEvent.click(await screen.findByRole('button', { name: 'New request' }))
-    expect(await screen.findByRole('combobox', { name: 'Repositorio' })).toHaveValue('project-1')
+    expect(await screen.findByRole('combobox', { name: "Repository" })).toHaveValue('project-1')
     expect(screen.getByRole('button', { name: 'Session' })).toHaveAttribute('aria-current', 'page')
   })
 
@@ -98,7 +98,7 @@ describe('task workspace', () => {
 
     fireEvent.keyDown(document,{key:'2',altKey:true})
     expect(screen.getByRole('button',{name:'Session'})).toHaveAttribute('aria-current','page')
-    const intention=await screen.findByRole('textbox',{name:/Qué querés lograr/})
+    const intention=await screen.findByRole('textbox',{name:/What do you want to achieve/})
     fireEvent.keyDown(intention,{key:'1',altKey:true})
     expect(screen.getByRole('button',{name:'Session'})).toHaveAttribute('aria-current','page')
 
@@ -128,14 +128,14 @@ describe('task workspace', () => {
   it('creates a task from the Session workspace', async () => {
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    const execute = screen.getByRole('button', { name: 'Elegí un repositorio para continuar' })
+    const execute = screen.getByRole('button', { name: "Choose a repository to continue" })
     expect(execute).toBeDisabled()
-    expect(await screen.findByText('Elegí explícitamente dónde trabajará el agente.')).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Repositorio' }), { target: { value: 'project-1' } })
+    expect(await screen.findByText("Choose where the agent will work.")).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: "Repository" }), { target: { value: 'project-1' } })
     expect(screen.getByText('C:\\dev\\demo')).toBeInTheDocument()
-    expect(screen.getByText(/worktree aislado/)).toBeInTheDocument()
-    fireEvent.change(await screen.findByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'), { target: { value: 'Nueva tarea' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Crear y ejecutar en Demo' }))
+    expect(screen.getByText(/isolated worktree/)).toBeInTheDocument()
+    fireEvent.change(await screen.findByPlaceholderText("E.g. fix login validation and add tests"), { target: { value: 'Nueva tarea' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create and run in Demo' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/tasks'),
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"repository_id":"project-1"') }),
@@ -145,9 +145,9 @@ describe('task workspace', () => {
   it('never selects the first repository automatically', async () => {
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    const repository = await screen.findByRole('combobox', { name: 'Repositorio' })
+    const repository = await screen.findByRole('combobox', { name: "Repository" })
     expect(repository).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Elegí un repositorio para continuar' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: "Choose a repository to continue" })).toBeDisabled()
   })
 
   it('runs against the explicitly selected repository when several exist', async () => {
@@ -157,11 +157,11 @@ describe('task workspace', () => {
     ]
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    const repository = await screen.findByRole('combobox', { name: 'Repositorio' })
+    const repository = await screen.findByRole('combobox', { name: "Repository" })
     expect(repository).toHaveValue('')
     fireEvent.change(repository, { target: { value: 'project-b' } })
-    fireEvent.change(screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'), { target: { value: 'Actualizar Web' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Crear y ejecutar en Web' }))
+    fireEvent.change(screen.getByPlaceholderText("E.g. fix login validation and add tests"), { target: { value: 'Actualizar Web' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create and run in Web' }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/tasks'),
       expect.objectContaining({ body: expect.stringContaining('"repository_id":"project-b"') }),
@@ -175,9 +175,9 @@ describe('task workspace', () => {
     }]
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Session' }))
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Repositorio' }), { target: { value: 'project-1' } })
-    fireEvent.change(screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'), { target: { value: 'Crear un archivo nuevo' } })
-    const createFromDraft = await screen.findByRole('button', { name: 'Crear y ejecutar en Demo' })
+    fireEvent.change(await screen.findByRole('combobox', { name: "Repository" }), { target: { value: 'project-1' } })
+    fireEvent.change(screen.getByPlaceholderText("E.g. fix login validation and add tests"), { target: { value: 'Crear un archivo nuevo' } })
+    const createFromDraft = await screen.findByRole('button', { name: 'Create and run in Demo' })
     fireEvent.click(createFromDraft)
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/tasks'),
@@ -197,9 +197,9 @@ describe('task workspace', () => {
     }]
     render(<App />)
     fireEvent.click(screen.getByRole('button',{name:'Session'}))
-    const repository=await screen.findByRole('combobox',{name:'Repositorio'})
-    const model=await screen.findByRole('combobox',{name:'Modelo para esta solicitud'})
-    const intention=screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas')
+    const repository=await screen.findByRole('combobox',{name:"Repository"})
+    const model=await screen.findByRole('combobox',{name:"Model for this request"})
+    const intention=screen.getByPlaceholderText("E.g. fix login validation and add tests")
 
     for(const request of [
       {repository:'project-a',project:'Python app',model:'qwen2.5-coder:1.5b',text:'Crea una app Python'},
@@ -209,7 +209,7 @@ describe('task workspace', () => {
       fireEvent.change(repository,{target:{value:request.repository}})
       fireEvent.change(model,{target:{value:request.model}})
       fireEvent.change(intention,{target:{value:request.text}})
-      fireEvent.click(screen.getByRole('button',{name:`Crear y ejecutar en ${request.project}`}))
+      fireEvent.click(screen.getByRole('button',{name:`Create and run in ${request.project}`}))
       await waitFor(()=>expect(intention).toHaveValue(''))
     }
 
@@ -235,7 +235,7 @@ describe('task workspace', () => {
     }]
     render(<App />)
     fireEvent.click(screen.getByRole('button',{name:'Session'}))
-    fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
+    fireEvent.change(await screen.findByRole('combobox',{name:"Repository"}),{target:{value:'project-1'}})
     const closeTask=screen.getByRole('button',{name:'■ Close task'})
     expect(closeTask).toBeEnabled()
     fireEvent.click(closeTask)
@@ -244,10 +244,10 @@ describe('task workspace', () => {
       expect.objectContaining({method:'POST'}),
     ))
     fireEvent.click(await screen.findByRole('button',{name:'Configure retry'}))
-    expect(screen.getByText('Elegí cómo ejecutar el nuevo intento')).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox',{name:'Modelo 1'}),{target:{value:'large'}})
-    fireEvent.click(screen.getByRole('button',{name:'Agregar etapa'}))
-    fireEvent.click(screen.getByRole('button',{name:'Iniciar nuevo intento'}))
+    expect(screen.getByText("Choose how to run the new attempt")).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox',{name:'Model 1'}),{target:{value:'large'}})
+    fireEvent.click(screen.getByRole('button',{name:"Add stage"}))
+    fireEvent.click(screen.getByRole('button',{name:"Start new attempt"}))
 
     await waitFor(()=>expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/tasks/task-failed'),
@@ -274,22 +274,22 @@ describe('task workspace', () => {
     }]
     render(<App />)
     fireEvent.click(screen.getByRole('button',{name:'Session'}))
-    fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
+    fireEvent.change(await screen.findByRole('combobox',{name:"Repository"}),{target:{value:'project-1'}})
     fireEvent.click(await screen.findByRole('button',{name:'Configure retry'}))
 
-    expect(screen.getByRole('combobox',{name:'Rol 1'})).toHaveValue('development')
-    expect(screen.getByRole('combobox',{name:'Proveedor 1'})).toHaveValue('ollama')
-    expect(screen.getByRole('combobox',{name:'Modelo 1'})).toHaveValue('gemma:12b')
-    expect(screen.getByText(/exactamente los que se usarán/)).toBeInTheDocument()
-    expect(screen.getByRole('button',{name:'Iniciar nuevo intento'})).toBeEnabled()
+    expect(screen.getByRole('combobox',{name:'Role 1'})).toHaveValue('development')
+    expect(screen.getByRole('combobox',{name:'Provider 1'})).toHaveValue('ollama')
+    expect(screen.getByRole('combobox',{name:'Model 1'})).toHaveValue('gemma:12b')
+    expect(screen.getByText(/exactly what will be used/)).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:"Start new attempt"})).toBeEnabled()
   })
 
   it('shows an actionable empty state when no repositories exist', async () => {
     projectFixtures = []
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.click(await screen.findByRole('button', { name: '+ Agregar proyecto' }))
-    const selectRepository = await screen.findByRole('button', { name: 'Usar repositorio existente' })
+    fireEvent.click(await screen.findByRole('button', { name: "+ Add project" }))
+    const selectRepository = await screen.findByRole('button', { name: "Use existing repository" })
     fireEvent.click(selectRepository)
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/projects/pick-directory'),
@@ -300,20 +300,20 @@ describe('task workspace', () => {
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"path":"/home/dev/nuevo"') }),
     ))
     expect(await screen.findByText('/home/dev/nuevo')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Crear y ejecutar en nuevo' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create and run in nuevo' })).toBeDisabled()
   })
 
   it('creates a project from scratch when no repository is open', async () => {
     projectFixtures = []
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.click(await screen.findByRole('button', { name: '+ Agregar proyecto' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Crear proyecto vacío' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Nombre del proyecto nuevo' }), { target: { value: 'greenfield' } })
+    fireEvent.click(await screen.findByRole('button', { name: "+ Add project" }))
+    fireEvent.click(await screen.findByRole('button', { name: "Create empty project" }))
+    fireEvent.change(screen.getByRole('textbox', { name: "New project name" }), { target: { value: 'greenfield' } })
     pickerResult = { canceled: false, name: 'dev', path: 'C:\\dev' }
-    fireEvent.click(screen.getByRole('button', { name: 'Elegir carpeta…' }))
+    fireEvent.click(screen.getByRole('button', { name: "Choose folder…" }))
     expect(await screen.findByDisplayValue('C:\\dev')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Crear e inicializar' }))
+    fireEvent.click(screen.getByRole('button', { name: "Create and initialize" }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/projects/create-new'),
       expect.objectContaining({
@@ -324,28 +324,28 @@ describe('task workspace', () => {
     const createCall = (fetch as unknown as {mock:{calls:[string,RequestInit][]}}).mock.calls.find(([url])=>url.includes('/projects/create-new'))
     expect(String(createCall?.[1]?.body)).not.toContain('template')
     expect(await screen.findByText('C:\\dev\\greenfield')).toBeInTheDocument()
-    expect(screen.getByText(/worktree aislado/)).toBeInTheDocument()
+    expect(screen.getByText(/isolated worktree/)).toBeInTheDocument()
   })
 
   it('closes the project dialog from its backdrop', async () => {
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.click(await screen.findByRole('button', { name: '+ Agregar proyecto' }))
-    const dialog=await screen.findByRole('dialog',{name:'Agregar proyecto'})
+    fireEvent.click(await screen.findByRole('button', { name: "+ Add project" }))
+    const dialog=await screen.findByRole('dialog',{name:"Add project"})
     fireEvent.mouseDown(dialog.parentElement!)
-    expect(screen.queryByRole('dialog',{name:'Agregar proyecto'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog',{name:"Add project"})).not.toBeInTheDocument()
   })
 
   it('explains why an invalid repository cannot be connected', async () => {
     projectFixtures = []
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.click(await screen.findByRole('button', { name: '+ Agregar proyecto' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Crear proyecto vacío' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Ingresar ruta manualmente' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Ruta absoluta del repositorio Git' }), { target: { value: 'C:\\missing' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Conectar repositorio' }))
-    expect(await screen.findByText('La carpeta seleccionada no pertenece a un repositorio Git.')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: "+ Add project" }))
+    fireEvent.click(await screen.findByRole('button', { name: "Create empty project" }))
+    fireEvent.click(await screen.findByRole('button', { name: "Enter path manually" }))
+    fireEvent.change(screen.getByRole('textbox', { name: "Git repository absolute path" }), { target: { value: 'C:\\missing' } })
+    fireEvent.click(screen.getByRole('button', { name: "Connect repository" }))
+    expect(await screen.findByText("The selected folder does not belong to a Git repository.")).toBeInTheDocument()
   })
 
   it('keeps the workspace unchanged when native selection is canceled', async () => {
@@ -353,14 +353,14 @@ describe('task workspace', () => {
     pickerResult = { canceled: true }
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.click(await screen.findByRole('button', { name: '+ Agregar proyecto' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Usar repositorio existente' }))
+    fireEvent.click(await screen.findByRole('button', { name: "+ Add project" }))
+    fireEvent.click(await screen.findByRole('button', { name: "Use existing repository" }))
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/projects/pick-directory'),
       expect.objectContaining({ method: 'POST' }),
     ))
-    expect(screen.getByRole('button', { name: 'Elegí un repositorio para continuar' })).toBeDisabled()
-    expect(screen.queryByRole('group', { name: 'Conectar repositorio manualmente' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Choose a repository to continue" })).toBeDisabled()
+    expect(screen.queryByRole('group', { name: "Connect repository manually" })).not.toBeInTheDocument()
   })
 
   it('removes the legacy Code workspace from primary navigation', async () => {
@@ -433,10 +433,10 @@ describe('task workspace', () => {
     expect(screen.getByText('imports · extracted')).toBeInTheDocument()
     expect(screen.getByText('Current index')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'Ask Oberth about this'}))
-    const draft=await screen.findByRole('textbox',{name:/Qué querés lograr/})
+    const draft=await screen.findByRole('textbox',{name:/What do you want to achieve/})
     expect((draft as HTMLTextAreaElement).value).toContain('app.ts')
-    expect(screen.getByRole('combobox',{name:'Repositorio'})).toHaveValue('project-1')
-    fireEvent.click(screen.getByRole('button',{name:'Crear y ejecutar en Demo'}))
+    expect(screen.getByRole('combobox',{name:"Repository"})).toHaveValue('project-1')
+    fireEvent.click(screen.getByRole('button',{name:'Create and run in Demo'}))
     await waitFor(()=>expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/tasks$/),expect.objectContaining({method:'POST',body:expect.stringContaining('"code_map_context"')})))
     const taskCall=(fetch as unknown as {mock:{calls:[string,RequestInit][]}}).mock.calls.find(([url,init])=>String(url).endsWith('/tasks')&&init?.method==='POST')
     const taskBody=JSON.parse(String(taskCall?.[1]?.body))
@@ -455,9 +455,9 @@ describe('task workspace', () => {
   it('provides a real Vault search control and does not invent an executable route', async () => {
     render(<App />)
     fireEvent.click(screen.getAllByText('Vault')[0])
-    expect(await screen.findByRole('textbox', { name: 'Buscar en Vault' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: "Search Vault" })).toBeInTheDocument()
     fireEvent.click(screen.getAllByText('Routes')[0])
-    expect(await screen.findByText('Resolución automática')).toBeInTheDocument()
+    expect(await screen.findByText("Automatic routing")).toBeInTheDocument()
     expect(screen.queryByText('automatic routing')).not.toBeInTheDocument()
   })
 
@@ -501,15 +501,15 @@ describe('task workspace', () => {
     ]
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
-    fireEvent.change(screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'),{target:{value:'Implementar con revisión'}})
-    fireEvent.click(screen.getByRole('button',{name:/Opciones/}))
-    fireEvent.click(screen.getByRole('checkbox',{name:'Orquestación por roles'}))
-    await screen.findByRole('group',{name:'Workflow de agentes'})
-    fireEvent.change(screen.getByRole('combobox',{name:'Proveedor 1'}),{target:{value:'cloud'}})
-    fireEvent.change(screen.getByRole('combobox',{name:'Proveedor 2'}),{target:{value:'cloud'}})
-    fireEvent.change(screen.getByRole('combobox',{name:'Proveedor 3'}),{target:{value:'cloud'}})
-    fireEvent.click(screen.getByRole('button',{name:'Crear y ejecutar en Demo'}))
+    fireEvent.change(await screen.findByRole('combobox',{name:"Repository"}),{target:{value:'project-1'}})
+    fireEvent.change(screen.getByPlaceholderText("E.g. fix login validation and add tests"),{target:{value:'Implementar con revisión'}})
+    fireEvent.click(screen.getByRole('button',{name:/Advanced options/}))
+    fireEvent.click(screen.getByRole('checkbox',{name:"Orchestration by roles"}))
+    await screen.findByRole('group',{name:'Agent workflow'})
+    fireEvent.change(screen.getByRole('combobox',{name:'Provider 1'}),{target:{value:'cloud'}})
+    fireEvent.change(screen.getByRole('combobox',{name:'Provider 2'}),{target:{value:'cloud'}})
+    fireEvent.change(screen.getByRole('combobox',{name:'Provider 3'}),{target:{value:'cloud'}})
+    fireEvent.click(screen.getByRole('button',{name:'Create and run in Demo'}))
     await waitFor(()=>expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/tasks'),
       expect.objectContaining({method:'POST',body:expect.stringContaining('"execution_plan"')}),
@@ -523,15 +523,15 @@ describe('task workspace', () => {
   it('blocks an invalid role workflow and takes the user to provider setup', async () => {
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
-    fireEvent.change(screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'),{target:{value:'Implementar autenticación'}})
-    fireEvent.click(screen.getByRole('button',{name:/Opciones/}))
-    fireEvent.click(screen.getByRole('checkbox',{name:'Orquestación por roles'}))
+    fireEvent.change(await screen.findByRole('combobox',{name:"Repository"}),{target:{value:'project-1'}})
+    fireEvent.change(screen.getByPlaceholderText("E.g. fix login validation and add tests"),{target:{value:'Implementar autenticación'}})
+    fireEvent.click(screen.getByRole('button',{name:/Advanced options/}))
+    fireEvent.click(screen.getByRole('checkbox',{name:"Orchestration by roles"}))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('No hay proveedores activos')
-    expect(screen.getByRole('button',{name:'Completá la configuración de ejecución'})).toBeDisabled()
+    expect(await screen.findByRole('alert')).toHaveTextContent('No active providers')
+    expect(screen.getByRole('button',{name:"Complete the run configuration"})).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button',{name:'Configurar proveedores'}))
+    fireEvent.click(screen.getByRole('button',{name:"Configure providers"}))
     expect(await screen.findByText('Manual configuration')).toBeInTheDocument()
   })
 
@@ -541,13 +541,13 @@ describe('task workspace', () => {
     ]
     render(<App />)
     fireEvent.click(screen.getAllByText('Session')[0])
-    fireEvent.change(await screen.findByRole('combobox',{name:'Repositorio'}),{target:{value:'project-1'}})
-    fireEvent.change(screen.getByPlaceholderText('Ej.: corregí la validación del login y agregá pruebas'),{target:{value:'Analizar arquitectura'}})
-    fireEvent.click(screen.getByRole('button',{name:/Opciones/}))
-    fireEvent.click(screen.getByRole('checkbox',{name:'Orquestación por roles'}))
+    fireEvent.change(await screen.findByRole('combobox',{name:"Repository"}),{target:{value:'project-1'}})
+    fireEvent.change(screen.getByPlaceholderText("E.g. fix login validation and add tests"),{target:{value:'Analizar arquitectura'}})
+    fireEvent.click(screen.getByRole('button',{name:/Advanced options/}))
+    fireEvent.click(screen.getByRole('checkbox',{name:"Orchestration by roles"}))
 
-    expect(await screen.findAllByText(/Compatibilidad en validación:/)).toHaveLength(2)
-    expect(screen.getByRole('button',{name:'Crear y ejecutar en Demo'})).toBeEnabled()
+    expect(await screen.findAllByText(/Compatibility under validation:/)).toHaveLength(2)
+    expect(screen.getByRole('button',{name:'Create and run in Demo'})).toBeEnabled()
   })
 })
 
@@ -562,13 +562,13 @@ describe('verifiable reasoning review',()=>{
       evidence:[],
       assessment:{material_records:1,supported_records:0,coverage_percent:0,missing_evidence:['p1'],dangling_evidence:[],gate_blockers:['p1: required property is not passed']},
     }}/>)
-    expect(screen.getByRole('region',{name:'Razonamiento verificable'})).toBeInTheDocument()
+    expect(screen.getByRole('region',{name:"Verifiable Reasoning"})).toBeInTheDocument()
     expect(screen.getByText('Falta la política desplegada de reintentos')).toBeInTheDocument()
-    expect(screen.getByText('Próxima acción: adjuntar la configuración de producción')).toBeInTheDocument()
-    expect(screen.getByText('property · unknown · obligatoria')).toBeInTheDocument()
-    expect(screen.getByText('0/1 propiedades verificadas')).toBeInTheDocument()
-    expect(screen.getByText('0% de cobertura')).toBeInTheDocument()
-    expect(screen.getByText('Promoción bloqueada por evidencia')).toBeInTheDocument()
+    expect(screen.getByText('Next action: adjuntar la configuración de producción')).toBeInTheDocument()
+    expect(screen.getByText('property · unknown · required')).toBeInTheDocument()
+    expect(screen.getByText('0/1 verified properties')).toBeInTheDocument()
+    expect(screen.getByText('0% coverage')).toBeInTheDocument()
+    expect(screen.getByText("Promotion blocked by evidence")).toBeInTheDocument()
     expect(screen.getByText('p1: required property is not passed')).toBeInTheDocument()
   })
 
@@ -578,7 +578,7 @@ describe('verifiable reasoning review',()=>{
       evidence:[{id:'e1',source:'file:main.go',stale:true}],
       assessment:{material_records:0,supported_records:0,coverage_percent:0,missing_evidence:[],dangling_evidence:[],gate_blockers:[]},
     }}/>)
-    expect(screen.getByText('Evidencia obsoleta')).toBeInTheDocument()
+    expect(screen.getByText("Outdated evidence")).toBeInTheDocument()
     expect(screen.getByText('e1 · file:main.go')).toBeInTheDocument()
   })
 
@@ -588,7 +588,7 @@ describe('verifiable reasoning review',()=>{
       experiments:[{id:'x1',question:'¿Pasa la suite el candidato?',environment:'windows/amd64 · go1.24',command:'go test ./...',expectation:'todos los paquetes pasan',observation:'todos los paquetes pasaron',status:'passed',duration_ms:1250,cost:0.001,evidence_ids:['ev-turn-003'],claim_ids:['p-message'],baseline_fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',candidate_fingerprint:'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}],
       assessment:{material_records:0,supported_records:0,coverage_percent:0,missing_evidence:[],dangling_evidence:[],gate_blockers:[]},
     }}/>)
-    expect(screen.getByText('Experimentos reproducibles')).toBeInTheDocument()
+    expect(screen.getByText("Reproducible experiments")).toBeInTheDocument()
     expect(screen.getByText('¿Pasa la suite el candidato?')).toBeInTheDocument()
     expect(screen.getByText('go test ./...')).toBeInTheDocument()
     expect(screen.getByText(/base sha256:aaaaaaaaaaa/)).toBeInTheDocument()

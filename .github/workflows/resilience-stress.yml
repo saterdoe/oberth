@@ -1,0 +1,36 @@
+name: Resilience stress
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '19 4 * * 1'
+permissions:
+  contents: read
+jobs:
+  stress:
+    name: Resilience (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/resilience-stress.test.mjs
+      - run: node scripts/resilience-stress.mjs ${{ github.event_name == 'schedule' && '10' || '3' }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: resilience-${{ matrix.os }}
+          path: artifacts/resilience
+          retention-days: 14
+          if-no-files-found: error

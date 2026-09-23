@@ -14,6 +14,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   checks, isolated fixtures, retained gate reports and native CI coverage (#52).
 - Durable planning, correction, rejection, conflict, cursor replay and fresh-run
   resume scenarios alongside evidence-backed promotion checks.
+- Repeated durable-runtime resilience checks with database shutdown/restart,
+  cursor replay, concurrent decisions and worktree/worker cleanup assertions
+  (#45).
+- Per-iteration stress evidence retained by scheduled Linux and Windows CI.
 
 ### Changed
 
@@ -21,6 +25,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   messages, preserving conversations, paths and technical identifiers verbatim.
 - Format dates, costs, numbers and count-dependent messages with Intl, and
   enforce catalog parity and visible-copy contracts in UI tests (#26).
+- Guard run decisions before Git mutations so concurrent decisions cannot
+  modify the same reviewed worktree before persistence rejects the loser.
 
 ## 0.1.0-alpha.9 - 2026-08-26
 

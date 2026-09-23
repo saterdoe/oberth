@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.0-alpha.10 - 2026-09-23
+
 ### Added
 
 - Authenticated runtime readiness and content-free, bounded stage/provider latency
@@ -27,6 +29,34 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   enforce catalog parity and visible-copy contracts in UI tests (#26).
 - Guard run decisions before Git mutations so concurrent decisions cannot
   modify the same reviewed worktree before persistence rejects the loser.
+
+### Security
+
+- Update Vitest and its coverage/mocking packages to `4.1.11`, closing the
+  development-server path traversal advisory in the UI test toolchain.
+- Refresh locked VS Code packaging dependencies to non-vulnerable `fast-uri`,
+  `js-yaml` and `qs` versions. Final npm audits report zero vulnerabilities in
+  the root, UI and extension dependency trees.
+
+### Migration and recovery
+
+- This release introduces no database schema migration and does not rewrite
+  persisted task, event, memory, provider or Code Map data.
+- Runtime diagnostics and validation artifacts are additive and bounded. They
+  can be discarded without affecting user repositories or durable task state.
+- Rollback to `0.1.0-alpha.9` does not require a data downgrade. Stop Oberth,
+  preserve the configured data directory, install the previous binaries and
+  run `oberth doctor` before resuming work.
+
+### Limitations
+
+- Readiness confirms local storage and runtime dependencies, not remote model
+  quality or availability.
+- The hermetic ladder validates product invariants with a scripted provider;
+  live-provider conformance remains a separate operator check.
+- Resilience coverage models the documented database, provider and concurrent
+  decision failures; it does not claim atomicity between Git and PostgreSQL or
+  exhaustive protection from arbitrary power loss.
 
 ## 0.1.0-alpha.9 - 2026-08-26
 

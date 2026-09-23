@@ -4,7 +4,7 @@ import {catalogs,I18nProvider,translate,useI18n} from './i18n'
 import {formatters} from './format'
 
 function Probe(){const{locale,setLocale,t}=useI18n();return <><span>{locale}</span><strong>{t('dashboard.newTask')}</strong><span>{t('nav.costs')}</span><button aria-label={t('taskWorkspace.refresh')}>{t('taskWorkspace.refresh')}</button><button onClick={()=>setLocale(locale==='en'?'es':'en')}>switch</button></>}
-const immutable=['Oberth v0.1.0-alpha.9','Ollama','tokens','projects/4a280ac68fd9/sessions/721fb570','System','Proveedor','Revisá los cambios y decidí','Cambios: árbol, sesión, configuración.']
+const immutable=['Oberth v0.1.0-alpha.10','Ollama','tokens','projects/4a280ac68fd9/sessions/721fb570','System','Proveedor','Revisá los cambios y decidí','Cambios: árbol, sesión, configuración.']
 describe('typed localization',()=>{
   beforeEach(()=>localStorage.clear())
   it('defaults to English, switches product copy and persists Spanish',()=>{

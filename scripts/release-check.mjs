@@ -11,6 +11,7 @@ export const RELEASE_STEPS = Object.freeze([
   { name: 'Install UI dependencies', command: 'npm', args: ['--prefix', 'ui', 'ci'] },
   { name: 'Install VS Code extension dependencies', command: 'npm', args: ['--prefix', 'extensions/vscode', 'ci'] },
   { name: 'Go tests', command: 'go', args: ['test', './cmd/...', './internal/...', './pkg/...'] },
+  { name: 'Isolated performance budgets', command: 'go', args: ['test', '-tags', 'performance', './internal/perfbench', '-run', 'TestRegressionBudgets', '-count=1'] },
   { name: 'Go vet', command: 'go', args: ['vet', './cmd/...', './internal/...', './pkg/...'] },
   { name: 'Go builds', command: 'go', args: ['build', './cmd/oberth', './cmd/oberth-server'] },
   {
@@ -44,6 +45,7 @@ function run(command, args, options = {}) {
     : args
   const result = spawnSync(childCommand, childArgs, {
     cwd: root,
+    env: {...process.env, OBERTH_PERF_REPORT: process.env.OBERTH_PERF_REPORT || path.join(root, 'artifacts', 'performance', 'go-performance.json')},
     encoding: 'utf8',
     stdio: options.capture ? 'pipe' : 'inherit',
   })

@@ -17,14 +17,20 @@ filesystem discovery and hashing. The fixtures contain identical deterministic
 Go files and never call an embedding service or network endpoint.
 
 The frontend production bundle is limited to 100 KiB gzip JavaScript, 25 KiB
-gzip CSS, and 500 KiB total uncompressed assets. CI uploads both
-`go-performance.json` and `ui-bundle.json` even when a gate fails.
+gzip CSS, and 500 KiB total uncompressed assets. CI uploads the available
+reports even when a gate fails; the Go report includes partial measurements.
+UI measurements are produced only if execution reaches the UI build.
+
+The Go latency test uses the `performance` build tag so a broad parallel
+`go test ./...` cannot compete with the measurement. Both the shared release
+runner and the dedicated performance job explicitly execute that tagged gate
+in isolation. Thresholds are unchanged; this isolates load, not failures.
 
 Run locally:
 
 ```text
-$env:OBERTH_PERF_REPORT='artifacts/performance/go-performance.json'
-go test ./internal/perfbench -run TestRegressionBudgets -count=1 -v
+$env:OBERTH_PERF_REPORT=(Join-Path (Get-Location) 'artifacts/performance/go-performance.json')
+go test -tags performance ./internal/perfbench -run TestRegressionBudgets -count=1 -v
 npm --prefix ui run build
 node scripts/ui-budget.mjs
 ```

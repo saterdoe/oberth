@@ -13,6 +13,7 @@ assert.deepEqual(
     'Install UI dependencies',
     'Install VS Code extension dependencies',
     'Go tests',
+    'Isolated performance budgets',
     'Go vet',
     'Go builds',
     'Race detector',
@@ -33,6 +34,10 @@ for (const script of ['scripts/check-release.ps1', 'scripts/check-release.sh']) 
 }
 
 const workflow = read('.github/workflows/ci.yml')
+assert.deepEqual(RELEASE_STEPS.find(step => step.name === 'Isolated performance budgets').args,
+  ['test', '-tags', 'performance', './internal/perfbench', '-run', 'TestRegressionBudgets', '-count=1'],
+  'the isolated performance gate must remain mandatory and uncached')
+assert.ok(read('internal/perfbench/performance_test.go').startsWith('//go:build performance'))
 for (const runner of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
   assert.ok(workflow.includes(runner), `CI must run the release contract on ${runner}`)
 }

@@ -10,6 +10,10 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
   diagnostics with correlated traces and stale-progress/lease signals (#20).
 - Runtime telemetry in doctor bundles, raw-configuration omission, and documented
   initial operational SLOs and diagnostic retention limits.
+- A provider-free validation ladder with named invariants, offline dependency
+  checks, isolated fixtures, retained gate reports and native CI coverage (#52).
+- Durable planning, correction, rejection, conflict, cursor replay and fresh-run
+  resume scenarios alongside evidence-backed promotion checks.
 
 ### Changed
 

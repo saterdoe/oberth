@@ -19,6 +19,29 @@ type Embedded struct {
 }
 
 func StartEmbedded(dataRoot string) (*Embedded, error) {
+	return startEmbedded(dataRoot, "")
+}
+
+// StartEmbeddedOffline uses a prepared distribution and never downloads it.
+// binariesRoot is the distribution root containing bin/pg_ctl, not a database.
+func StartEmbeddedOffline(dataRoot, binariesRoot string) (*Embedded, error) {
+	if binariesRoot == "" || !filepath.IsAbs(binariesRoot) {
+		return nil, fmt.Errorf("offline PostgreSQL distribution must be an absolute path")
+	}
+	// embedded-postgres checks this exact path even on Windows.
+	for _, name := range []string{"pg_ctl", "postgres", "initdb"} {
+		binary := name
+		if runtime.GOOS == "windows" && name != "pg_ctl" {
+			binary += ".exe"
+		}
+		if !fileExists(filepath.Join(binariesRoot, "bin", binary)) {
+			return nil, fmt.Errorf("offline PostgreSQL distribution is missing bin/%s; prepare dependencies first", name)
+		}
+	}
+	return startEmbedded(dataRoot, binariesRoot)
+}
+
+func startEmbedded(dataRoot, binariesRoot string) (*Embedded, error) {
 	ensureWindowsVCRuntime()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -45,6 +68,9 @@ func StartEmbedded(dataRoot string) (*Embedded, error) {
 		BinariesPath(filepath.Join(versionRoot, "binaries")).
 		DataPath(filepath.Join(versionRoot, "database")).
 		StartTimeout(60 * time.Second)
+	if binariesRoot != "" {
+		cfg = cfg.BinariesPath(binariesRoot)
+	}
 	database := embeddedpostgres.NewDatabase(cfg)
 	if err := database.Start(); err != nil {
 		return nil, fmt.Errorf("start embedded database: %w", err)

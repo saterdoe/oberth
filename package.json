@@ -20,7 +20,7 @@
     "version:check": "node scripts/version.mjs",
     "version:set": "node scripts/version.mjs --set",
     "quality": "node scripts/quality.mjs",
-    "test:performance": "go test ./internal/perfbench -run TestRegressionBudgets -count=1 -v && npm --prefix ui run build && node scripts/ui-budget.mjs",
+    "test:performance": "go test -tags performance ./internal/perfbench -run TestRegressionBudgets -count=1 -v && npm --prefix ui run build && node scripts/ui-budget.mjs",
     "test:release-contract": "node scripts/release_check_contract.test.mjs",
     "check:release": "node scripts/release-check.mjs",
     "test:release-workflow": "node scripts/release_workflow_contract.test.mjs",

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 
 	"github.com/saterdoe/oberth/internal/doctor"
@@ -29,9 +28,13 @@ var doctorCmd = &cobra.Command{
 			hasWarning = hasWarning || c.Status == doctor.StatusWarn
 		}
 		if doctorBundlePath != "" {
-			configData, _ := os.ReadFile(".oberth.yaml")
+			diagnostics, diagnosticErr := doctor.FetchRuntimeDiagnostics()
+			var diagnosticErrors []string
+			if diagnosticErr != nil {
+				diagnosticErrors = append(diagnosticErrors, diagnosticErr.Error())
+			}
 			if err := doctor.CreateBundle(doctorBundlePath, doctor.BundleInput{
-				Config: string(configData), Versions: map[string]string{"go": runtime.Version(), "oberth": Version}, Health: checks,
+				Versions: map[string]string{"go": runtime.Version(), "oberth": Version}, Health: checks, Runtime: diagnostics, Errors: diagnosticErrors,
 			}); err != nil {
 				return fmt.Errorf("creating diagnostic bundle: %w", err)
 			}

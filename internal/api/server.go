@@ -18,6 +18,7 @@ import (
 	"github.com/saterdoe/oberth/internal/gateway"
 	"github.com/saterdoe/oberth/internal/mcp"
 	"github.com/saterdoe/oberth/internal/nativepicker"
+	"github.com/saterdoe/oberth/internal/observability"
 	"github.com/saterdoe/oberth/internal/permission"
 	"github.com/saterdoe/oberth/internal/structuredoutput"
 	"github.com/saterdoe/oberth/internal/vault"
@@ -49,6 +50,8 @@ type Server struct {
 	runsMu        sync.Mutex
 	activeRuns    map[uuid.UUID]stdcontext.CancelFunc
 	startingRuns  map[uuid.UUID]startingRun
+	draining      bool
+	telemetry     observability.Collector
 	contextCache  *context.CompilationCache
 	shutdown      func()
 	pickDirectory func(stdcontext.Context) (string, error)
@@ -138,6 +141,8 @@ func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) registerRoutes() {
+	s.mux.HandleFunc("GET /api/v1/ready", s.handleReadiness)
+	s.mux.HandleFunc("GET /api/v1/diagnostics/runtime", s.handleRuntimeDiagnostics)
 	// Health
 	s.mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

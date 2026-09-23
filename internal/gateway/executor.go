@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/saterdoe/oberth/internal/observability"
 	"github.com/saterdoe/oberth/pkg/llm"
 )
 
@@ -259,7 +260,9 @@ func (e *StepExecutor) executeChat(ctx context.Context, providerID string, provi
 		if err := e.checkCircuit(providerID); err != nil {
 			return nil, err
 		}
+		finishMetric := observability.Start(ctx, "provider.chat", providerID)
 		response, err := provider.Chat(ctx, request)
+		finishMetric(err)
 		if err == nil {
 			e.recordProviderSuccess(providerID)
 			return response, nil
@@ -471,6 +474,7 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 			continue
 		}
 		attemptCtx, cancel := context.WithCancel(ctx)
+		finishMetric := observability.Start(ctx, "provider.stream", link.providerID)
 		type streamResult struct {
 			stream <-chan llm.StreamEvent
 			err    error
@@ -493,6 +497,7 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 		}
 		if err != nil {
 			<-gate
+			finishMetric(err)
 			cancel()
 			if !inactivity.Stop() {
 				select {
@@ -542,6 +547,7 @@ func (e *StepExecutor) ExecuteStepStream(ctx context.Context, step Step, message
 			}
 		}
 		<-gate
+		finishMetric(streamErr)
 		if streamErr != nil {
 			e.recordProviderFailure(link.providerID)
 			attempts = append(attempts, Attempt{Provider: link.providerID, Model: link.model, Err: streamErr})

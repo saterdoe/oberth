@@ -62,6 +62,7 @@ func serve(ctx context.Context, cfg *config.Config, apiServer *api.Server) error
 	}
 
 	slog.Info("shutting down server gracefully")
+	apiServer.BeginDrain()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

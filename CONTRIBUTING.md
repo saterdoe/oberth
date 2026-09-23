@@ -13,6 +13,7 @@ while public interfaces are still taking shape.
 Follow the [Quickstart](docs/QUICKSTART.md) to set up the CLI and local service.
 The measured coverage and static-analysis checks are documented in
 [Quality gates](docs/QUALITY_GATES.md).
+UI changes must also follow the [localization contract](docs/LOCALIZATION.md).
 
 ## Before submitting a change
 

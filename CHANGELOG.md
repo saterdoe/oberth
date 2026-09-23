@@ -4,6 +4,13 @@ All notable changes follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Replace DOM-mutation localization with explicit typed English/Spanish UI
+  messages, preserving conversations, paths and technical identifiers verbatim.
+- Format dates, costs, numbers and count-dependent messages with Intl, and
+  enforce catalog parity and visible-copy contracts in UI tests (#26).
+
 ## 0.1.0-alpha.9 - 2026-08-26
 
 ### Added

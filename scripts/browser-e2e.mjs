@@ -108,6 +108,11 @@ const server = createServer(async (request, response) => {
 })
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 const origin = `http://127.0.0.1:${server.address().port}`
+// Manual UI inspection uses the same isolated fixtures, never a developer vault.
+if (process.argv.includes('--serve')) {
+  console.log(`Fixture QA server: ${origin}`)
+  await new Promise(() => {})
+}
 const waitForFixture = async (predicate, label) => {
   const deadline = Date.now() + 2000
   while (!predicate()) {

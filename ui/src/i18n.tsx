@@ -1,5 +1,7 @@
-import {createContext,ReactNode,useContext,useLayoutEffect,useMemo,useState} from 'react'
-import {compatTranslations} from './i18n-compat'
+import {createContext,ReactNode,useContext,useMemo,useState} from 'react'
+import {productEn,productEs} from './messages'
+import {dynamicEn,dynamicEs} from './messages-dynamic'
+import {formatters} from './format'
 
 export type Locale='en'|'es'
 const STORAGE_KEY='oberth.locale'
@@ -22,7 +24,7 @@ const sessionEn={
   'session.run':'Run{project}',
   'session.checkResult':'Check the result below or prepare a new request.','session.newRequest':'New request','session.processing':'Processing…','session.retryNoChanges':'Retry without changes{project}','session.configureRetry':'Configure retry','session.newChange':'New change{project}','session.waitingReview':'Waiting for review','session.running':'Running','session.cancelRun':'Cancel run','session.closeTask':'Close task','session.noDescription':'No additional description.','session.lastAttempt':'Last attempt configuration',
   'session.repoUnavailable':'Repository unavailable','session.pathUnavailable':'path unavailable','session.basePending':'pending','session.worktreePending':'pending','session.readOnly':'Read-only query · The repository was not modified.','session.appliedCheckout':'Changes applied to the main checkout.','session.isolated':'Isolated environment · The main checkout does not change until you accept.','session.appliedRepository':'Changes applied to the repository. Write a new intent above and use “Request new change” for the next iteration.',
-  'session.agentChanges':'Agent changes','session.filesReady':'{count} file(s) ready to review','session.viewDiff':'See full diff ↓','session.openWorktree':'Open worktree folder','session.openIn':'Open in {ide}','session.opening':'Opening {ide}…','session.noIDE':'No compatible IDE was detected; open the folder with your preferred editor.',
+  'session.agentChanges':'Agent changes','session.filesReady':'{count} files ready to review','session.viewDiff':'See full diff ↓','session.openWorktree':'Open worktree folder','session.openIn':'Open in {ide}','session.opening':'Opening {ide}…','session.noIDE':'No compatible IDE was detected; open the folder with your preferred editor.',
   'conversation.title':'Conversation','conversation.you':'You','session.technicalDetails':'Technical details','session.plan':'Plan','session.activity':'Activity','session.timeline':'Timeline','session.current':'Session in progress','session.result':'Result',
 } as const
 const sessionEs:{[K in keyof typeof sessionEn]:string}={
@@ -30,10 +32,12 @@ const sessionEs:{[K in keyof typeof sessionEn]:string}={
   'session.run':'Ejecutar{project}',
   'session.checkResult':'Revisá el resultado abajo o prepará una nueva solicitud.','session.newRequest':'Nueva solicitud','session.processing':'Procesando…','session.retryNoChanges':'Reintentar sin cambios{project}','session.configureRetry':'Configurar reintento','session.newChange':'Nuevo cambio{project}','session.waitingReview':'Esperando revisión','session.running':'En ejecución','session.cancelRun':'Cancelar ejecución','session.closeTask':'Cerrar tarea','session.noDescription':'Sin descripción adicional.','session.lastAttempt':'Configuración del último intento',
   'session.repoUnavailable':'Repositorio no disponible','session.pathUnavailable':'ruta no disponible','session.basePending':'pendiente','session.worktreePending':'pendiente','session.readOnly':'Consulta de sólo lectura · No se modificó el repositorio.','session.appliedCheckout':'Cambios aplicados al checkout principal.','session.isolated':'Entorno aislado · El checkout principal no cambia hasta que aceptes.','session.appliedRepository':'Cambios aplicados al repositorio. Escribí una nueva intención arriba y usá «Solicitar nuevo cambio» para la próxima iteración.',
-  'session.agentChanges':'Cambios del agente','session.filesReady':'{count} archivo(s) listos para revisar','session.viewDiff':'Ver diff completo ↓','session.openWorktree':'Abrir carpeta del worktree','session.openIn':'Abrir en {ide}','session.opening':'Abriendo {ide}…','session.noIDE':'No se detectó un IDE compatible; abrí la carpeta con tu editor preferido.',
+  'session.agentChanges':'Cambios del agente','session.filesReady':'{count} archivos listos para revisar','session.viewDiff':'Ver diff completo ↓','session.openWorktree':'Abrir carpeta del worktree','session.openIn':'Abrir en {ide}','session.opening':'Abriendo {ide}…','session.noIDE':'No se detectó un IDE compatible; abrí la carpeta con tu editor preferido.',
   'conversation.title':'Conversación','conversation.you':'Vos','session.technicalDetails':'Detalles técnicos','session.plan':'Plan','session.activity':'Actividad','session.timeline':'Línea de tiempo','session.current':'Sesión en curso','session.result':'Resultado',
 }
 const en={
+  ...dynamicEn,
+  ...productEn,
   ...codeIndexEn,
   ...sessionEn,
   'nav.dashboard':'Dashboard','nav.session':'Session','nav.vault':'Vault','nav.routes':'Routes','nav.costs':'Costs','nav.settings':'Settings','nav.main':'Main navigation',
@@ -71,6 +75,8 @@ const en={
 } as const
 type Messages={ [K in keyof typeof en]:string }
 const es:Messages={
+  ...dynamicEs,
+  ...productEs,
   ...codeIndexEs,
   ...sessionEs,
   'nav.dashboard':'Inicio','nav.session':'Sesión','nav.vault':'Memoria','nav.routes':'Rutas','nav.costs':'Costos','nav.settings':'Configuración','nav.main':'Navegación principal',
@@ -106,92 +112,24 @@ const es:Messages={
   'settings.providers.type':'Tipo','settings.providers.name':'Nombre','settings.providers.model':'Modelo','settings.providers.cancel':'Cancelar','settings.providers.saveChanges':'Guardar cambios','settings.providers.save':'Guardar proveedor','settings.providers.keepSecret':'Dejar vacío para conservarla',
   'statusbar.desktop':'aplicación local','statusbar.web':'servidor local','statusbar.vault':'memoria','statusbar.ok':'ok','statusbar.offline':'sin conexión','statusbar.semantic':'búsqueda semántica','statusbar.disabled':'desactivada','statusbar.localFallback':'alternativa local disponible','statusbar.ready':'lista','statusbar.externalVector':'motor vectorial externo','statusbar.builtinVector':'índice vectorial integrado',
 }
-const catalogs:Record<Locale,Messages>={en,es}
-const catalogValues:Record<Locale,Set<string>>={
-  en:new Set(Object.values(en)),
-  es:new Set(Object.values(es)),
-}
-const compatLookup:Record<Locale,Map<string,string>>={en:new Map(),es:new Map()}
-for(const row of compatTranslations){
-  for(const alias of [row.source,row.en,row.es]){
-    compatLookup.en.set(alias,row.en)
-    compatLookup.es.set(alias,row.es)
-  }
-}
-const reviewedCompatOverrides=[
-  {source:'Actualizar',en:'Refresh',es:'Actualizar'},
-  {source:'Actualizando\u2026',en:'Refreshing\u2026',es:'Actualizando\u2026'},
-  {source:'Opciones de ejecuci\u00f3n',en:'Execution options',es:'Opciones de ejecuci\u00f3n'},
-  {source:'Usala solo cuando quieras asignar modelos diferentes a varias etapas.',en:'Use this only when you want to assign different models to multiple stages.',es:'Usala solo cuando quieras asignar modelos diferentes a varias etapas.'},
-  {source:'No se pudo completar la acción: timeout',en:'The action could not be completed: timeout',es:'No se pudo completar la acción: timeout'},
-  {source:'Ingresar ruta manualmente',en:'Enter path manually',es:'Ingresar ruta manualmente'},
-  {source:'Modelo para esta solicitud',en:'Model for this request',es:'Modelo para esta solicitud'},
-  {source:'Proveedor',en:'Provider',es:'Proveedor'},
-  {source:'Configurar proveedores',en:'Configure providers',es:'Configurar proveedores'},
-  {source:'ruta no disponible',en:'path unavailable',es:'ruta no disponible'},
-  {source:'tokens seleccionados',en:'selected tokens',es:'tokens seleccionados'},
-  {source:'descartadas',en:'discarded',es:'descartadas'},
-  {source:'activo',en:'active',es:'activo'},
-  {source:'registro de acciones tipadas',en:'typed action log',es:'registro de acciones tipadas'},
-  {source:'tokens por revisar',en:'tokens to review',es:'tokens por revisar'},
-  {source:'Descartar',en:'Discard',es:'Descartar'},
-  {source:'coincidencia',en:'match',es:'coincidencia'},
-  {source:'Eliminar',en:'Delete',es:'Eliminar'},
-  {source:'Por proveedor',en:'By provider',es:'Por proveedor'},
-  {source:'auth required',en:'authentication required',es:'autenticación requerida'},
-] as const
-for(const row of reviewedCompatOverrides)for(const alias of [row.source,row.en,row.es]){compatLookup.en.set(alias,row.en);compatLookup.es.set(alias,row.es)}
+export const catalogs:Record<Locale,Messages>={en,es}
+const localeFormats={en:formatters('en'),es:formatters('es')}
+const pluralRules={en:new Intl.PluralRules('en'),es:new Intl.PluralRules('es')}
 export type MessageKey=keyof Messages
 export function savedLocale():Locale{return localStorage.getItem(STORAGE_KEY)==='es'?'es':'en'}
 export function translate(locale:Locale,key:MessageKey,values:Record<string,string|number>={}){
-  return Object.entries(values).reduce((text,[name,value])=>text.replaceAll(`{${name}}`,String(value)),catalogs[locale][key]??en[key])
+  const pluralKey=typeof values.count==='number'?`${key}.${pluralRules[locale].select(values.count)}` as MessageKey:key
+  const template=catalogs[locale][pluralKey]??catalogs[locale][key]??en[key]
+  // Single-pass interpolation: user values containing {placeholders} stay verbatim.
+  return template.replace(/\{(\w+)\}/g,(placeholder,name)=>Object.hasOwn(values,name)?typeof values[name]==='number'?localeFormats[locale].number(values[name] as number):String(values[name]):placeholder)
 }
-type ContextValue={locale:Locale;setLocale:(locale:Locale)=>void;t:(key:MessageKey,values?:Record<string,string|number>)=>string}
-const defaultValue:ContextValue={locale:'en',setLocale:()=>{},t:(key,values)=>translate('en',key,values)}
+type ContextValue={locale:Locale;setLocale:(locale:Locale)=>void;t:(key:MessageKey,values?:Record<string,string|number>)=>string;format:ReturnType<typeof formatters>}
+const defaultValue:ContextValue={locale:'en',setLocale:()=>{},t:(key,values)=>translate('en',key,values),format:formatters('en')}
 const Context=createContext<ContextValue>(defaultValue)
 export function I18nProvider({children}:{children:ReactNode}){
   const[locale,setLocaleState]=useState<Locale>(savedLocale)
-  const value=useMemo<ContextValue>(()=>({locale,setLocale:next=>{localStorage.setItem(STORAGE_KEY,next);document.documentElement.lang=next;setLocaleState(next)},t:(key,values)=>translate(locale,key,values)}),[locale])
+  const value=useMemo<ContextValue>(()=>({locale,format:formatters(locale),setLocale:next=>{localStorage.setItem(STORAGE_KEY,next);document.documentElement.lang=next;setLocaleState(next)},t:(key,values)=>translate(locale,key,values)}),[locale])
   document.documentElement.lang=locale
-  return <Context.Provider value={value}><CompatLocalization locale={locale}>{children}</CompatLocalization></Context.Provider>
+  return <Context.Provider value={value}>{children}</Context.Provider>
 }
 export function useI18n(){return useContext(Context)}
-
-function CompatLocalization({children,locale}:{children:ReactNode;locale:Locale}){
-  useLayoutEffect(()=>{
-    const attributes=['aria-label','placeholder','title']
-    const protectedTerms=new Set(['Oberth','Ollama','OpenAI','Anthropic','Google','Qdrant','Claude Code','Codex CLI','OpenCode CLI','Antigravity','LM Studio','API key','Base URL','JSON','QA','Git','Vault'])
-    const translateValue=(value:string)=>{
-      const trimmed=value.trim(),translated=compatLookup[locale].get(trimmed)
-      if(/\bv?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/.test(trimmed))return value
-      if(catalogValues[locale].has(trimmed))return value
-      if(protectedTerms.has(trimmed))return value
-      if(translated!==undefined)return value.replace(trimmed,translated)
-      return value
-    }
-    const localize=(root:Node)=>{
-      const element=root.nodeType===Node.TEXT_NODE?root.parentElement:root instanceof Element?root:null
-      if(element?.closest('[data-no-translate]'))return
-      if(root.nodeType===Node.TEXT_NODE){
-        const current=root.nodeValue||'',next=translateValue(current)
-        if(next!==current)root.nodeValue=next
-        return
-      }
-      if(root instanceof Element){
-        for(const name of attributes){
-          const current=root.getAttribute(name)
-          if(current!==null){
-            const next=translateValue(current)
-            if(next!==current)root.setAttribute(name,next)
-          }
-        }
-      }
-      for(const child of root.childNodes)localize(child)
-    }
-    localize(document.body)
-    const observer=new MutationObserver(records=>{for(const record of records){if(record.type==='characterData')localize(record.target);else for(const node of record.addedNodes)localize(node)}})
-    observer.observe(document.body,{subtree:true,childList:true,characterData:true})
-    return()=>observer.disconnect()
-  },[locale])
-  return children
-}
